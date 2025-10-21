@@ -5,11 +5,16 @@ plugins {
 }
 
 android {
+    buildFeatures {
+        buildConfig = true
+    }
     namespace = "com.criipto.verifyexample"
     compileSdk {
         version = release(36)
     }
 
+    val criiptoDomain = "YOUR CRIIPTO DOMAIN, WITHTOUT HTTPS"
+    val criiptoClientId = "YOUR CLIENT ID"
     defaultConfig {
         applicationId = "com.criipto.verifyexample"
         minSdk = 29
@@ -18,9 +23,15 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        manifestPlaceholders["criiptoDomain"] = criiptoDomain
     }
 
     buildTypes {
+        all {
+            buildConfigField("String", "CRIIPTO_DOMAIN", "\"$criiptoDomain\"")
+            buildConfigField("String", "CRIIPTO_CLIENT_ID", "\"$criiptoClientId\"")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -50,6 +61,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.jwtdecode)
     implementation(project(":verify"))
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
