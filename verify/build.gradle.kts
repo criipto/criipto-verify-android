@@ -37,7 +37,11 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.browser)
     implementation(libs.material)
+    implementation(libs.appauth)
+    implementation(libs.jwks.rsa)
+    implementation(libs.java.jwt)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
