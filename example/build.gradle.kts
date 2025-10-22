@@ -13,8 +13,9 @@ android {
     version = release(36)
   }
 
-  val criiptoDomain = "YOUR CRIIPTO DOMAIN, WITHTOUT HTTPS"
-  val criiptoClientId = "YOUR CLIENT ID"
+  val criiptoDomain = providers.gradleProperty("criiptoDomain").get()
+  val criiptoClientId = providers.gradleProperty("criiptoClientId").get()
+
   defaultConfig {
     applicationId = "com.criipto.verifyexample"
     minSdk = 29
@@ -23,6 +24,7 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    testInstrumentationRunnerArguments["useTestStorageService"] = "true"
 
     manifestPlaceholders["criiptoDomain"] = criiptoDomain
   }
@@ -68,6 +70,8 @@ dependencies {
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(platform(libs.androidx.compose.bom))
   androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+  androidTestImplementation(libs.uiautomator)
+  androidTestUtil(libs.androidx.test.services)
   debugImplementation(libs.androidx.compose.ui.tooling)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

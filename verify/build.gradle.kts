@@ -24,6 +24,9 @@ android {
         "proguard-rules.pro",
       )
     }
+    debug {
+      manifestPlaceholders["criiptoDomain"] = "placeholder for unit tests"
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
