@@ -18,14 +18,27 @@ import com.auth0.jwk.UrlJwkProvider
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.auth0.jwt.exceptions.JWTVerificationException
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.forms.submitForm
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.formUrlEncode
+import io.ktor.http.parametersOf
+import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import net.openid.appauth.AppAuthConfiguration
 import net.openid.appauth.AuthorizationException
+import net.openid.appauth.AuthorizationManagementActivity
 import net.openid.appauth.AuthorizationManagementRequest
 import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
@@ -71,6 +84,14 @@ class CriiptoVerify private constructor(
   private val appSwitchUri: Uri,
   private val activity: ComponentActivity,
 ) : DefaultLifecycleObserver {
+  private val httpClient =
+    HttpClient(Android) {
+      expectSuccess = true
+      install(ContentNegotiation) {
+        json()
+      }
+    }
+
   /**
    * The AppAuth authorization service, which provides helper methods for OIDC operations, and manages the browser.
    * The service needs access to the activity, so it is initialized in `onCreate`.
@@ -103,7 +124,8 @@ class CriiptoVerify private constructor(
    * An activity result launcher, used to a launch a custom tab intent and listen for the result.
    * See https://developer.android.com/training/basics/intents/result
    */
-  private var customTabIntentLauncher: ActivityResultLauncher<AuthorizationManagementRequest>
+  private var customTabIntentLauncher:
+    ActivityResultLauncher<Pair<AuthorizationManagementRequest, Uri>>
 
   /**
    * The currently in-flight request - Either an authorization or an end session request.
@@ -154,29 +176,33 @@ class CriiptoVerify private constructor(
     customTabIntentLauncher =
       activity.registerForActivityResult(
         object :
-          ActivityResultContract<AuthorizationManagementRequest, CustomTabResult>() {
+          ActivityResultContract<Pair<AuthorizationManagementRequest, Uri>, CustomTabResult>() {
           override fun createIntent(
             context: Context,
-            input: AuthorizationManagementRequest,
+            input: Pair<AuthorizationManagementRequest, Uri>,
           ): Intent {
             Log.d(TAG, "Creating custom tab intent")
 
+            var (request, uri) = input
+
             val customTabIntent =
               authorizationService
-                .createCustomTabsIntentBuilder(input.toUri())
+                .createCustomTabsIntentBuilder(uri)
                 .setSendToExternalDefaultHandlerEnabled(true)
                 .build()
 
-            return when (input) {
+            return when (request) {
               is AuthorizationRequest ->
-                authorizationService.getAuthorizationRequestIntent(
-                  input,
-                  customTabIntent,
+                AuthorizationManagementActivity.createStartForResultIntent(
+                  activity,
+                  request,
+                  customTabIntent.intent
+                    .setData(uri),
                 )
 
               is EndSessionRequest ->
                 authorizationService.getEndSessionRequestIntent(
-                  input,
+                  request,
                   customTabIntent,
                 )
 
@@ -270,6 +296,7 @@ class CriiptoVerify private constructor(
 
   override fun onDestroy(owner: LifecycleOwner) {
     authorizationService.dispose()
+    httpClient.close()
   }
 
   private fun handleResultUri(uri: Uri) {
@@ -418,11 +445,11 @@ class CriiptoVerify private constructor(
         .setLoginHint(loginHints.joinToString(" "))
         .build()
 
+    val parRequestUri = pushAuthorizationRequest(authorizationRequest)
+
     return suspendCoroutine { continuation ->
       loginRequestContinuation = continuation
-      launchBrowser(
-        authorizationRequest,
-      )
+      launchBrowser(authorizationRequest, parRequestUri)
     }
   }
 
@@ -439,7 +466,57 @@ class CriiptoVerify private constructor(
       )
     }
 
-  private fun launchBrowser(request: AuthorizationManagementRequest) {
+  /**
+   * Starts the PAR flow, as described in https://datatracker.ietf.org/doc/html/rfc9126
+   */
+  private suspend fun pushAuthorizationRequest(authorizationRequest: AuthorizationRequest): Uri =
+    withContext(
+      Dispatchers.IO,
+    ) {
+      val response =
+        httpClient.submitForm(
+          serviceConfiguration.discoveryDoc!!
+            .docJson
+            .get(
+              "pushed_authorization_request_endpoint",
+            ).toString(),
+        ) {
+          // The FormDataContent class appends ; charset=UTF-8 to the content-type, which Verify does not like. So we create our own type
+          setBody(
+            object : OutgoingContent.ByteArrayContent() {
+              override val contentType =
+                ContentType.Application.FormUrlEncoded.withoutParameters()
+
+              override fun bytes() =
+                parametersOf(
+                  authorizationRequest.toUri().queryParameterNames.associateWith {
+                    listOf(authorizationRequest.toUri().getQueryParameter(it)!!)
+                  },
+                ).formUrlEncode().toByteArray()
+            },
+          )
+        }
+
+      @Serializable()
+      data class ParResponse(
+        val request_uri: String,
+        val expires_in: Int,
+      )
+      val parsedResponse = response.body<ParResponse>()
+
+      serviceConfiguration.authorizationEndpoint
+        .buildUpon()
+        .appendQueryParameter("client_id", clientID)
+        .appendQueryParameter(
+          "request_uri",
+          parsedResponse.request_uri,
+        ).build()
+    }
+
+  private fun launchBrowser(
+    request: AuthorizationManagementRequest,
+    uri: Uri = request.toUri(),
+  ) {
     this.currentRequest = request
 
     if (tabType == TabType.AuthTab) {
@@ -451,13 +528,13 @@ class CriiptoVerify private constructor(
       authTabIntent.intent.`package` = Browsers.Chrome.PACKAGE_NAME
       authTabIntent.launch(
         authTabIntentLauncher,
-        request.toUri(),
+        uri,
         redirectUri.host!!,
         redirectUri.path!!,
       )
     } else {
       // Fall back to a Custom Tab.
-      customTabIntentLauncher.launch(request)
+      customTabIntentLauncher.launch(Pair(request, uri))
     }
   }
 

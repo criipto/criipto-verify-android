@@ -1,6 +1,7 @@
 plugins {
   alias(libs.plugins.android.library)
   alias(libs.plugins.kotlin.android)
+  kotlin("plugin.serialization") version "2.2.20"
 }
 
 android {
@@ -42,6 +43,13 @@ dependencies {
   implementation(libs.appauth)
   implementation(libs.jwks.rsa)
   implementation(libs.java.jwt)
+
+  implementation(libs.ktor.client.core)
+  implementation(libs.ktor.client.android)
+  implementation(libs.ktor.client.content.negotiation)
+  implementation(libs.kotlinx.serialization)
+  implementation(libs.ktor.serialization.kotlinx.json)
+
   testImplementation(libs.junit)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
