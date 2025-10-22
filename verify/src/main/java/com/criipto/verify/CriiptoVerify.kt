@@ -46,383 +46,440 @@ import kotlin.coroutines.suspendCoroutine
 
 const val TAG = "CriiptoVerify"
 
-
 private const val BRAVE = "com.brave.browser"
 private const val EDGE = "com.microsoft.emmx"
 
 private enum class TabType {
-    CustomTab(), AuthTab()
+  CustomTab(),
+  AuthTab(),
 }
 
 sealed class CustomTabResult {
-    class CustomTabSuccess(val resultUri: Uri) : CustomTabResult()
-    class CustomTabFailure(val ex: AuthorizationException) : CustomTabResult()
+  class CustomTabSuccess(
+    val resultUri: Uri,
+  ) : CustomTabResult()
+
+  class CustomTabFailure(
+    val ex: AuthorizationException,
+  ) : CustomTabResult()
 }
 
 class CriiptoVerify private constructor(
-    private val clientID: String,
-    private val domain: Uri,
-    private val redirectUri: Uri,
-    private val appSwitchUri: Uri,
-    private val activity: ComponentActivity
+  private val clientID: String,
+  private val domain: Uri,
+  private val redirectUri: Uri,
+  private val appSwitchUri: Uri,
+  private val activity: ComponentActivity,
 ) : DefaultLifecycleObserver {
-    /**
-     * The AppAuth authorization service, which provides helper methods for OIDC operations, and manages the browser.
-     * The service needs access to the activity, so it is initialized in `onCreate`.
-     */
-    private lateinit var authorizationService: AuthorizationService
+  /**
+   * The AppAuth authorization service, which provides helper methods for OIDC operations, and manages the browser.
+   * The service needs access to the activity, so it is initialized in `onCreate`.
+   */
+  private lateinit var authorizationService: AuthorizationService
 
-    /**
-     * The OIDC service configuration for your Criipto domain. Loaded in `create()`
-     */
-    private lateinit var serviceConfiguration: AuthorizationServiceConfiguration
+  /**
+   * The OIDC service configuration for your Criipto domain. Loaded in `create()`
+   */
+  private lateinit var serviceConfiguration: AuthorizationServiceConfiguration
 
-    /**
-     * The type of browser tab to user, either custom tab or auth tab.
-     * Determining the supported browser requires an activity, so this is set in `onCreate`.
-     */
-    private lateinit var tabType: TabType
+  /**
+   * The type of browser tab to user, either custom tab or auth tab.
+   * Determining the supported browser requires an activity, so this is set in `onCreate`.
+   */
+  private lateinit var tabType: TabType
 
-    /**
-     * The JWKS (JSON Web Key Set) used by Criipto to sign the returned JWT. Loaded in `create()`
-     * */
-    private var jwks: List<Jwk>? = null
+  /**
+   * The JWKS (JSON Web Key Set) used by Criipto to sign the returned JWT. Loaded in `create()`
+   * */
+  private var jwks: List<Jwk>? = null
 
-    /**
-     * An activity result launcher, used to a launch an auth tab intent and listen for the result.
-     * See https://developer.android.com/training/basics/intents/result
-     */
-    private var authTabIntentLauncher: ActivityResultLauncher<Intent?>
+  /**
+   * An activity result launcher, used to a launch an auth tab intent and listen for the result.
+   * See https://developer.android.com/training/basics/intents/result
+   */
+  private var authTabIntentLauncher: ActivityResultLauncher<Intent?>
 
-    /**
-     * An activity result launcher, used to a launch a custom tab intent and listen for the result.
-     * See https://developer.android.com/training/basics/intents/result
-     */
-    private var customTabIntentLauncher: ActivityResultLauncher<AuthorizationManagementRequest>
+  /**
+   * An activity result launcher, used to a launch a custom tab intent and listen for the result.
+   * See https://developer.android.com/training/basics/intents/result
+   */
+  private var customTabIntentLauncher: ActivityResultLauncher<AuthorizationManagementRequest>
 
-    /**
-     * The currently in-flight request - Either an authorization or an end session request.
-     */
-    private var currentRequest: AuthorizationManagementRequest? = null
+  /**
+   * The currently in-flight request - Either an authorization or an end session request.
+   */
+  private var currentRequest: AuthorizationManagementRequest? = null
 
-    /**
-     * The continuation that should be invoked when a login request completes
-     */
-    private var loginRequestContinuation: Continuation<String>? = null
+  /**
+   * The continuation that should be invoked when a login request completes
+   */
+  private var loginRequestContinuation: Continuation<String>? = null
 
-    /**
-     * The continuation that should be invoked when a logout request completes
-     */
-    private var logoutRequestContinuation: Continuation<Unit>? = null
+  /**
+   * The continuation that should be invoked when a logout request completes
+   */
+  private var logoutRequestContinuation: Continuation<Unit>? = null
 
-    companion object {
-        suspend fun create(
-            clientID: String,
-            domain: Uri,
-            redirectUri: Uri = "$domain/android/callback".toUri(),
-            appSwitchUri: Uri = "$domain/android/callback/appswitch".toUri(),
-            activity: ComponentActivity
-        ): CriiptoVerify {
-            val criiptoVerify = CriiptoVerify(clientID, domain, redirectUri, appSwitchUri, activity)
+  companion object {
+    suspend fun create(
+      clientID: String,
+      domain: Uri,
+      redirectUri: Uri = "$domain/android/callback".toUri(),
+      appSwitchUri: Uri = "$domain/android/callback/appswitch".toUri(),
+      activity: ComponentActivity,
+    ): CriiptoVerify {
+      val criiptoVerify = CriiptoVerify(clientID, domain, redirectUri, appSwitchUri, activity)
 
-            coroutineScope {
-                async { criiptoVerify.fetchCriiptoOIDCConfiguration() }
-                async { criiptoVerify.fetchCriiptoJWKS() }
-            }.await()
+      coroutineScope {
+        async { criiptoVerify.fetchCriiptoOIDCConfiguration() }
+        async { criiptoVerify.fetchCriiptoJWKS() }
+      }.await()
 
-            return criiptoVerify
-        }
+      return criiptoVerify
+    }
+  }
+
+  init {
+    for (uri in listOf(domain, redirectUri, appSwitchUri)) {
+      if (uri.scheme != "https") {
+        throw Exception("domain, redirectUri and appSwitchUri must be HTTPS URIs")
+      }
     }
 
-    init {
-        for (uri in listOf(domain, redirectUri, appSwitchUri)) {
-            if (uri.scheme != "https") {
-                throw Exception("domain, redirectUri and appSwitchUri must be HTTPS URIs")
-            }
-        }
+    activity.lifecycle.addObserver(this)
 
-        activity.lifecycle.addObserver(this)
+    authTabIntentLauncher =
+      AuthTabIntent.registerActivityResultLauncher(activity, this::handleAuthTabResult)
 
-        authTabIntentLauncher =
-            AuthTabIntent.registerActivityResultLauncher(activity, this::handleAuthTabResult)
+    customTabIntentLauncher =
+      activity.registerForActivityResult(
+        object :
+          ActivityResultContract<AuthorizationManagementRequest, CustomTabResult>() {
+          override fun createIntent(
+            context: Context,
+            input: AuthorizationManagementRequest,
+          ): Intent {
+            Log.d(TAG, "Creating custom tab intent")
 
-        customTabIntentLauncher = activity.registerForActivityResult(object :
-            ActivityResultContract<AuthorizationManagementRequest, CustomTabResult>() {
-            override fun createIntent(
-                context: Context, input: AuthorizationManagementRequest
-            ): Intent {
-                Log.d(TAG, "Creating custom tab intent")
-
-                val customTabIntent =
-                    authorizationService.createCustomTabsIntentBuilder(input.toUri())
-                        .setSendToExternalDefaultHandlerEnabled(true).build()
-
-                return when (input) {
-                    is AuthorizationRequest -> authorizationService.getAuthorizationRequestIntent(
-                        input, customTabIntent
-                    )
-
-                    is EndSessionRequest -> authorizationService.getEndSessionRequestIntent(
-                        input, customTabIntent
-                    )
-
-                    else -> throw Exception("Unsupported request type $input")
-                }
-            }
-
-            override fun parseResult(
-                resultCode: Int, intent: Intent?
-            ): CustomTabResult {
-                Log.d(TAG, "Parsing result from custom tab intent")
-                val ex = AuthorizationException.fromIntent(intent)
-
-                return if (ex != null) {
-                    CustomTabResult.CustomTabFailure(ex)
-                } else {
-                    CustomTabResult.CustomTabSuccess(intent!!.data!!)
-                }
-            }
-        }, this::handleCustomTabResult)
-    }
-
-    override fun onCreate(owner: LifecycleOwner) {
-        tabType = if (CustomTabsClient.isAuthTabSupported(
-                activity, Browsers.Chrome.PACKAGE_NAME
-            )
-        ) TabType.AuthTab else TabType.CustomTab
-
-        val enabledBrowsers = listOf(
-            Browsers.Chrome.PACKAGE_NAME,
-            Browsers.SBrowser.PACKAGE_NAME,
-            BRAVE,
-            EDGE
-        ).associateWith {
-            (CustomTabsClient.getPackageName(
-                activity, listOf(it), true
-            ) != null)
-        }
-
-        val browserMatcher: BrowserMatcher = when (tabType) {
-            // When using an auth tab, we do not need the internal browser matching logic from appauth
-            TabType.AuthTab -> {
-                Log.i(TAG, "Using Chrome with auth tab")
-                BrowserMatcher { false }
-            }
-            TabType.CustomTab -> if (enabledBrowsers[Browsers.Chrome.PACKAGE_NAME] == true) {
-                Log.i(TAG, "Using Chrome with custom tab")
-                VersionedBrowserMatcher.CHROME_CUSTOM_TAB
-            } else if (enabledBrowsers[Browsers.SBrowser.PACKAGE_NAME] == true) {
-                Log.i(TAG, "Using Samsung browser with custom tab")
-                VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB
-            } else if (enabledBrowsers[BRAVE] == true) {
-                Log.i(TAG, "Using Brave with custom tab")
-                BrowserMatcher { descriptor -> descriptor.packageName === BRAVE }
-            } else if (enabledBrowsers[EDGE] == true) {
-                Log.i(TAG, "Using Edge with custom tab")
-                BrowserMatcher { descriptor -> descriptor.packageName === EDGE }
-            } else {
-                Log.i(TAG, "Falling back to any browser")
-                // Fallback to any browser. TODO: maybe disable via flag?
-                AnyBrowserMatcher.INSTANCE
-            }
-        }
-
-        authorizationService = AuthorizationService(
-            activity, AppAuthConfiguration.Builder().setBrowserMatcher(
-                browserMatcher
-            ).build()
-        )
-    }
-
-    override fun onDestroy(owner: LifecycleOwner) {
-        authorizationService.dispose()
-    }
-
-    private fun handleResultUri(uri: Uri) {
-        val currentRequest = this.currentRequest
-        if (currentRequest == null) {
-            Log.d(TAG, "Got a result URI $uri, but no active request.")
-            return
-        }
-
-        val response = when (currentRequest) {
-            is AuthorizationRequest -> AuthorizationResponse.Builder(currentRequest).fromUri(uri)
+            val customTabIntent =
+              authorizationService
+                .createCustomTabsIntentBuilder(input.toUri())
+                .setSendToExternalDefaultHandlerEnabled(true)
                 .build()
 
-            is EndSessionRequest -> EndSessionResponse.Builder(currentRequest).setState(
-                uri.getQueryParameter(
-                    "state"
+            return when (input) {
+              is AuthorizationRequest ->
+                authorizationService.getAuthorizationRequestIntent(
+                  input,
+                  customTabIntent,
                 )
+
+              is EndSessionRequest ->
+                authorizationService.getEndSessionRequestIntent(
+                  input,
+                  customTabIntent,
+                )
+
+              else -> throw Exception("Unsupported request type $input")
+            }
+          }
+
+          override fun parseResult(
+            resultCode: Int,
+            intent: Intent?,
+          ): CustomTabResult {
+            Log.d(TAG, "Parsing result from custom tab intent")
+            val ex = AuthorizationException.fromIntent(intent)
+
+            return if (ex != null) {
+              CustomTabResult.CustomTabFailure(ex)
+            } else {
+              CustomTabResult.CustomTabSuccess(intent!!.data!!)
+            }
+          }
+        },
+        this::handleCustomTabResult,
+      )
+  }
+
+  override fun onCreate(owner: LifecycleOwner) {
+    tabType =
+      if (CustomTabsClient.isAuthTabSupported(
+          activity,
+          Browsers.Chrome.PACKAGE_NAME,
+        )
+      ) {
+        TabType.AuthTab
+      } else {
+        TabType.CustomTab
+      }
+
+    val enabledBrowsers =
+      listOf(
+        Browsers.Chrome.PACKAGE_NAME,
+        Browsers.SBrowser.PACKAGE_NAME,
+        BRAVE,
+        EDGE,
+      ).associateWith {
+        (
+          CustomTabsClient.getPackageName(
+            activity,
+            listOf(it),
+            true,
+          ) != null
+        )
+      }
+
+    val browserMatcher: BrowserMatcher =
+      when (tabType) {
+        // When using an auth tab, we do not need the internal browser matching logic from appauth
+        TabType.AuthTab -> {
+          Log.i(TAG, "Using Chrome with auth tab")
+          BrowserMatcher { false }
+        }
+        TabType.CustomTab ->
+          if (enabledBrowsers[Browsers.Chrome.PACKAGE_NAME] == true) {
+            Log.i(TAG, "Using Chrome with custom tab")
+            VersionedBrowserMatcher.CHROME_CUSTOM_TAB
+          } else if (enabledBrowsers[Browsers.SBrowser.PACKAGE_NAME] == true) {
+            Log.i(TAG, "Using Samsung browser with custom tab")
+            VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB
+          } else if (enabledBrowsers[BRAVE] == true) {
+            Log.i(TAG, "Using Brave with custom tab")
+            BrowserMatcher { descriptor -> descriptor.packageName === BRAVE }
+          } else if (enabledBrowsers[EDGE] == true) {
+            Log.i(TAG, "Using Edge with custom tab")
+            BrowserMatcher { descriptor -> descriptor.packageName === EDGE }
+          } else {
+            Log.i(TAG, "Falling back to any browser")
+            // Fallback to any browser. TODO: maybe disable via flag?
+            AnyBrowserMatcher.INSTANCE
+          }
+      }
+
+    authorizationService =
+      AuthorizationService(
+        activity,
+        AppAuthConfiguration
+          .Builder()
+          .setBrowserMatcher(
+            browserMatcher,
+          ).build(),
+      )
+  }
+
+  override fun onDestroy(owner: LifecycleOwner) {
+    authorizationService.dispose()
+  }
+
+  private fun handleResultUri(uri: Uri) {
+    val currentRequest = this.currentRequest
+    if (currentRequest == null) {
+      Log.d(TAG, "Got a result URI $uri, but no active request.")
+      return
+    }
+
+    val response =
+      when (currentRequest) {
+        is AuthorizationRequest ->
+          AuthorizationResponse
+            .Builder(currentRequest)
+            .fromUri(uri)
+            .build()
+
+        is EndSessionRequest ->
+          EndSessionResponse
+            .Builder(currentRequest)
+            .setState(
+              uri.getQueryParameter(
+                "state",
+              ),
             ).build()
 
-            else -> {
-                Log.d(TAG, "Unsupported request type $currentRequest")
-                return
-            }
+        else -> {
+          Log.d(TAG, "Unsupported request type $currentRequest")
+          return
         }
+      }
 
-        if (currentRequest.state != response.state) {
-            Log.w(
-                TAG,
-                "State returned in authorization response (${response.state}) does not match state from request (${currentRequest.state}) - discarding response"
-            )
-            return
-        }
-
-        when (response) {
-            is AuthorizationResponse -> {
-                CoroutineScope(Dispatchers.IO).launch {
-                    authorizationService.performTokenRequest(
-                        response.createTokenExchangeRequest()
-                    ) { response, ex ->
-                        if (ex != null) {
-                            loginRequestContinuation?.resumeWithException(ex)
-                            return@performTokenRequest
-                        }
-
-                        // From TokenResponseCallback - Exactly one of `response` or `ex` will be non-null. So
-                        // when we reach this line, we know that response is not null.
-                        val idToken = response!!.idToken!!
-                        val decodedJWT = JWT.decode(idToken)
-
-                        val keyId = decodedJWT.getHeaderClaim("kid").asString()
-                        val key = jwks?.find { it.id == keyId }
-
-                        if (key == null) {
-                            loginRequestContinuation?.resumeWithException(Exception("Unknown key $keyId"))
-                            return@performTokenRequest
-                        }
-
-                        try {
-                            val algorithm = Algorithm.RSA256(key.publicKey as RSAPublicKey)
-                            val verifier =
-                                JWT.require(algorithm).withIssuer(domain.toString())
-                                    .ignoreIssuedAt() // Do not throw on JWTs with iat "in the future". This can easily happen due to clock skew, see https://github.com/auth0/java-jwt/issues/467
-                                    .acceptNotBefore(5) // Add five seconds of leeway when validating nbf.
-                                    .build()
-
-                            verifier.verify(idToken)
-                            loginRequestContinuation?.resume(idToken)
-                        } catch (exception: JWTVerificationException) {
-                            loginRequestContinuation?.resumeWithException(exception)
-                        }
-                    }
-                }
-
-            }
-
-            is EndSessionResponse -> logoutRequestContinuation?.resume(Unit)
-        }
-
-        this.currentRequest = null
+    if (currentRequest.state != response.state) {
+      Log.w(
+        TAG,
+        "State returned in authorization response (${response.state}) does not match state from request (${currentRequest.state}) - discarding response",
+      )
+      return
     }
 
-    private fun handleException(ex: Exception) {
-        if (currentRequest is AuthorizationRequest) {
-            loginRequestContinuation?.resumeWithException(ex)
-        } else if (currentRequest is EndSessionRequest) {
-            logoutRequestContinuation?.resumeWithException(ex)
-        }
-    }
-
-    private fun handleCustomTabResult(result: CustomTabResult) {
-        Log.i(TAG, "Handling custom tab result $result")
-
-        when (result) {
-            is CustomTabResult.CustomTabFailure -> handleException(result.ex)
-            is CustomTabResult.CustomTabSuccess -> handleResultUri(result.resultUri)
-        }
-    }
-
-    private fun handleAuthTabResult(result: AuthResult) {
-        Log.i(TAG, "Handling auth tab result. Code: ${result.resultCode}")
-
-        when (result.resultCode) {
-            AuthTabIntent.RESULT_OK -> handleResultUri(result.resultUri!!)
-            AuthTabIntent.RESULT_CANCELED -> handleException(Exception("RESULT_CANCELED"))
-            AuthTabIntent.RESULT_UNKNOWN_CODE -> handleException(Exception("RESULT_UNKNOWN_CODE"))
-            AuthTabIntent.RESULT_VERIFICATION_FAILED -> handleException(Exception("RESULT_VERIFICATION_FAILED"))
-            AuthTabIntent.RESULT_VERIFICATION_TIMED_OUT -> handleException(Exception("RESULT_VERIFICATION_TIMED_OUT"))
-        }
-    }
-
-    suspend fun login(
-        acr_value: String
-    ): String {
-        Log.i(TAG, "Starting login with $acr_value")
-
-        val loginHints = listOf(
-            "appswitch:android",
-            "appswitch:resumeUrl:${appSwitchUri}",
-            "mobile:continue_button:never"
-        )
-
-        val authorizationRequest = AuthorizationRequest.Builder(
-            serviceConfiguration,
-            clientID,
-            ResponseTypeValues.CODE,
-            redirectUri
-        ).setScope((listOf("openid")).joinToString(" "))
-            .setPrompt("login")
-            .setAdditionalParameters(mapOf("acr_values" to acr_value))
-            .setLoginHint(loginHints.joinToString(" ")).build()
-
-        return suspendCoroutine { continuation ->
-            loginRequestContinuation = continuation
-            launchBrowser(
-                authorizationRequest
-            )
-        }
-    }
-
-    suspend fun logout(idToken: String?) = suspendCoroutine { continuation ->
-        logoutRequestContinuation = continuation
-
-        launchBrowser(
-            EndSessionRequest.Builder(serviceConfiguration).setIdTokenHint(idToken)
-                .setPostLogoutRedirectUri(redirectUri).build()
-        )
-    }
-
-    private fun launchBrowser(request: AuthorizationManagementRequest) {
-        this.currentRequest = request
-
-        if (tabType == TabType.AuthTab) {
-            // Open the Authorization URI in an Auth Tab if supported by chrome
-            val authTabIntent = AuthTabIntent.Builder().build()
-
-            // Auth tab will use the default browser, but we force it to use chrome.
-            // In the future, other browser _could_ support the auth tab API (like they support custom tabs). But at the time of writing, only chrome supports it.
-            authTabIntent.intent.`package` = Browsers.Chrome.PACKAGE_NAME
-            authTabIntent.launch(
-                authTabIntentLauncher,
-                request.toUri(),
-                redirectUri.host!!,
-                redirectUri.path!!
-            )
-        } else {
-            // Fall back to a Custom Tab.
-            customTabIntentLauncher.launch(request)
-        }
-    }
-
-    private suspend fun fetchCriiptoJWKS() = withContext(Dispatchers.IO) {
-        jwks = UrlJwkProvider(domain.toString()).getAll()
-    }
-
-    private suspend fun fetchCriiptoOIDCConfiguration() = suspendCoroutine { continuation ->
-        AuthorizationServiceConfiguration.fetchFromIssuer(
-            domain
-        ) { _serviceConfiguration, ex ->
+    when (response) {
+      is AuthorizationResponse -> {
+        CoroutineScope(Dispatchers.IO).launch {
+          authorizationService.performTokenRequest(
+            response.createTokenExchangeRequest(),
+          ) { response, ex ->
             if (ex != null) {
-                Log.e(TAG, "Failed to fetch OIDC configuration", ex)
-                continuation.resumeWithException(ex)
+              loginRequestContinuation?.resumeWithException(ex)
+              return@performTokenRequest
             }
-            if (_serviceConfiguration != null) {
-                Log.d(TAG, "Fetched OIDC configuration")
-                serviceConfiguration = _serviceConfiguration
-                continuation.resume(Unit)
+
+            // From TokenResponseCallback - Exactly one of `response` or `ex` will be non-null. So
+            // when we reach this line, we know that response is not null.
+            val idToken = response!!.idToken!!
+            val decodedJWT = JWT.decode(idToken)
+
+            val keyId = decodedJWT.getHeaderClaim("kid").asString()
+            val key = jwks?.find { it.id == keyId }
+
+            if (key == null) {
+              loginRequestContinuation?.resumeWithException(Exception("Unknown key $keyId"))
+              return@performTokenRequest
             }
+
+            try {
+              val algorithm = Algorithm.RSA256(key.publicKey as RSAPublicKey)
+              val verifier =
+                JWT
+                  .require(algorithm)
+                  .withIssuer(domain.toString())
+                  // Do not throw on JWTs with iat "in the future". This can easily happen due to clock skew, see https://github.com/auth0/java-jwt/issues/467
+                  .ignoreIssuedAt()
+                  .acceptNotBefore(5) // Add five seconds of leeway when validating nbf.
+                  .build()
+
+              verifier.verify(idToken)
+              loginRequestContinuation?.resume(idToken)
+            } catch (exception: JWTVerificationException) {
+              loginRequestContinuation?.resumeWithException(exception)
+            }
+          }
         }
+      }
+
+      is EndSessionResponse -> logoutRequestContinuation?.resume(Unit)
+    }
+
+    this.currentRequest = null
+  }
+
+  private fun handleException(ex: Exception) {
+    if (currentRequest is AuthorizationRequest) {
+      loginRequestContinuation?.resumeWithException(ex)
+    } else if (currentRequest is EndSessionRequest) {
+      logoutRequestContinuation?.resumeWithException(ex)
+    }
+  }
+
+  private fun handleCustomTabResult(result: CustomTabResult) {
+    Log.i(TAG, "Handling custom tab result $result")
+
+    when (result) {
+      is CustomTabResult.CustomTabFailure -> handleException(result.ex)
+      is CustomTabResult.CustomTabSuccess -> handleResultUri(result.resultUri)
+    }
+  }
+
+  private fun handleAuthTabResult(result: AuthResult) {
+    Log.i(TAG, "Handling auth tab result. Code: ${result.resultCode}")
+
+    when (result.resultCode) {
+      AuthTabIntent.RESULT_OK -> handleResultUri(result.resultUri!!)
+      AuthTabIntent.RESULT_CANCELED -> handleException(Exception("RESULT_CANCELED"))
+      AuthTabIntent.RESULT_UNKNOWN_CODE -> handleException(Exception("RESULT_UNKNOWN_CODE"))
+      AuthTabIntent.RESULT_VERIFICATION_FAILED ->
+        handleException(
+          Exception("RESULT_VERIFICATION_FAILED"),
+        )
+      AuthTabIntent.RESULT_VERIFICATION_TIMED_OUT ->
+        handleException(
+          Exception("RESULT_VERIFICATION_TIMED_OUT"),
+        )
+    }
+  }
+
+  suspend fun login(acr_value: String): String {
+    Log.i(TAG, "Starting login with $acr_value")
+
+    val loginHints =
+      listOf(
+        "appswitch:android",
+        "appswitch:resumeUrl:$appSwitchUri",
+        "mobile:continue_button:never",
+      )
+
+    val authorizationRequest =
+      AuthorizationRequest
+        .Builder(
+          serviceConfiguration,
+          clientID,
+          ResponseTypeValues.CODE,
+          redirectUri,
+        ).setScope((listOf("openid")).joinToString(" "))
+        .setPrompt("login")
+        .setAdditionalParameters(mapOf("acr_values" to acr_value))
+        .setLoginHint(loginHints.joinToString(" "))
+        .build()
+
+    return suspendCoroutine { continuation ->
+      loginRequestContinuation = continuation
+      launchBrowser(
+        authorizationRequest,
+      )
+    }
+  }
+
+  suspend fun logout(idToken: String?) =
+    suspendCoroutine { continuation ->
+      logoutRequestContinuation = continuation
+
+      launchBrowser(
+        EndSessionRequest
+          .Builder(serviceConfiguration)
+          .setIdTokenHint(idToken)
+          .setPostLogoutRedirectUri(redirectUri)
+          .build(),
+      )
+    }
+
+  private fun launchBrowser(request: AuthorizationManagementRequest) {
+    this.currentRequest = request
+
+    if (tabType == TabType.AuthTab) {
+      // Open the Authorization URI in an Auth Tab if supported by chrome
+      val authTabIntent = AuthTabIntent.Builder().build()
+
+      // Auth tab will use the default browser, but we force it to use chrome.
+      // In the future, other browser _could_ support the auth tab API (like they support custom tabs). But at the time of writing, only chrome supports it.
+      authTabIntent.intent.`package` = Browsers.Chrome.PACKAGE_NAME
+      authTabIntent.launch(
+        authTabIntentLauncher,
+        request.toUri(),
+        redirectUri.host!!,
+        redirectUri.path!!,
+      )
+    } else {
+      // Fall back to a Custom Tab.
+      customTabIntentLauncher.launch(request)
+    }
+  }
+
+  private suspend fun fetchCriiptoJWKS() =
+    withContext(Dispatchers.IO) {
+      jwks = UrlJwkProvider(domain.toString()).getAll()
+    }
+
+  private suspend fun fetchCriiptoOIDCConfiguration() =
+    suspendCoroutine { continuation ->
+      AuthorizationServiceConfiguration.fetchFromIssuer(
+        domain,
+      ) { _serviceConfiguration, ex ->
+        if (ex != null) {
+          Log.e(TAG, "Failed to fetch OIDC configuration", ex)
+          continuation.resumeWithException(ex)
+        }
+        if (_serviceConfiguration != null) {
+          Log.d(TAG, "Fetched OIDC configuration")
+          serviceConfiguration = _serviceConfiguration
+          continuation.resume(Unit)
+        }
+      }
     }
 }

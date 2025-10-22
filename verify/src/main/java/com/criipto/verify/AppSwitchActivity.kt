@@ -11,9 +11,9 @@ import androidx.activity.ComponentActivity
  * finish the activity as soon as it is resume, and let the OAuth flow continue in the browser.
  */
 class AppSwitchActivity : ComponentActivity() {
-    override fun onResume() {
-        Log.i("AppSwitchActivity", "Handling app switch")
-        super.onResume()
-        finish()
-    }
+  override fun onResume() {
+    Log.i("AppSwitchActivity", "Handling app switch")
+    super.onResume()
+    finish()
+  }
 }
