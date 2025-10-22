@@ -15,9 +15,13 @@ appauth = "0.11.1"
 jwksRsa = "0.23.0"
 javaJwt = "4.5.0"
 jwtdecode = "2.0.2"
+ktlint = "13.1.0"
+testServices = "1.6.0"
+uiautomator = "2.4.0-alpha06"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-test-services = { module = "androidx.test.services:test-services", version.ref = "testServices" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
@@ -40,9 +44,12 @@ java-jwt = { group = "com.auth0", name = "java-jwt", version.ref = "javaJwt" }
 jwks-rsa = { group = "com.auth0", name = "jwks-rsa", version.ref = "jwksRsa" }
 jwtdecode = { group = "com.auth0.android", name = "jwtdecode", version.ref = "jwtdecode" }
 
+uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 android-library = { id = "com.android.library", version.ref = "agp" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
 
