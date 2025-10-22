@@ -1,0 +1,23 @@
+on: push
+
+# Replace old runs in the same group
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Run ktlint check
+        uses: burrunan/gradle-cache-action@v3
+        with:
+          arguments: ktlintCheck

@@ -34,199 +34,208 @@ import com.criipto.verifyexample.ui.LoginViewModel
 import com.criipto.verifyexample.ui.theme.CriiptoVerifyAndroidTheme
 
 class MainActivity : ComponentActivity() {
-    val loginViewModel = LoginViewModel(LoginState.NotLoggedIn(), this)
+  val loginViewModel = LoginViewModel(LoginState.NotLoggedIn(), this)
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            CriiptoVerifyAndroidTheme {
-                MainScreen(loginViewModel)
-            }
-        }
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    enableEdgeToEdge()
+    setContent {
+      CriiptoVerifyAndroidTheme {
+        MainScreen(loginViewModel)
+      }
     }
+  }
 }
 
 @Composable
-fun MainScreen(
-    loginViewModel: LoginViewModel
-) {
-    val loginState by loginViewModel.uiState.collectAsState()
+fun MainScreen(loginViewModel: LoginViewModel) {
+  val loginState by loginViewModel.uiState.collectAsState()
 
-    return when (loginState) {
-        is LoginState.LoggedIn -> LoggedInScreen(loginState as LoginState.LoggedIn) {
-            loginViewModel.logout()
-        }
+  return when (loginState) {
+    is LoginState.LoggedIn ->
+      LoggedInScreen(loginState as LoginState.LoggedIn) {
+        loginViewModel.logout()
+      }
 
-        is LoginState.NotLoggedIn -> LoginScreen(loginState as LoginState.NotLoggedIn) { eid ->
-            loginViewModel.login(eid)
-        }
+    is LoginState.NotLoggedIn ->
+      LoginScreen(loginState as LoginState.NotLoggedIn) { eid ->
+        loginViewModel.login(eid)
+      }
 
-        is LoginState.Loading -> LoadingScreen()
-    }
+    is LoginState.Loading -> LoadingScreen()
+  }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun LoadingScreen() {
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
+  Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+    Box(
+      modifier =
+        Modifier
+          .padding(innerPadding)
+          .fillMaxSize(),
+    ) {
+      Row(
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Column(
+          verticalArrangement = Arrangement.Center,
+          horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(
-                horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Spacer(modifier = Modifier.height(300.dp))
-                    CircularProgressIndicator(modifier = Modifier.width(100.dp))
-                }
-            }
+          Spacer(modifier = Modifier.height(300.dp))
+          CircularProgressIndicator(modifier = Modifier.width(100.dp))
         }
+      }
     }
+  }
 }
 
 class LoginStateViewModelLoggedInProvider : PreviewParameterProvider<LoginState.LoggedIn> {
-    override val values = listOf(
-        LoginState.LoggedIn(
-            idToken = "",
-            name = "Foo bar",
-            sub = "{ab4f92c7-0bba-4b94-b1e6-a7694386c247}",
-            identityscheme = "mock"
-        ),
+  override val values =
+    listOf(
+      LoginState.LoggedIn(
+        idToken = "",
+        name = "Foo bar",
+        sub = "{ab4f92c7-0bba-4b94-b1e6-a7694386c247}",
+        identityscheme = "mock",
+      ),
     ).asSequence()
 }
 
 @Preview(showBackground = true)
 @Composable
 fun LoggedInScreen(
-    @PreviewParameter(LoginStateViewModelLoggedInProvider::class) loginState: LoginState.LoggedIn,
-    onLogout: (() -> Unit)? = null
+  @PreviewParameter(LoginStateViewModelLoggedInProvider::class) loginState: LoginState.LoggedIn,
+  onLogout: (() -> Unit)? = null,
 ) {
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
+  Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+    Box(
+      modifier =
+        Modifier
+          .padding(innerPadding)
+          .fillMaxSize(),
+    ) {
+      Row(
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxSize(),
+      ) {
+        Column(
+          verticalArrangement = Arrangement.Center,
+          horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(
-                horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Spacer(modifier = Modifier.height(300.dp))
-                    Text(text = "Logged in!", fontSize = 30.sp)
-                    Spacer(modifier = Modifier.height(50.dp))
+          Spacer(modifier = Modifier.height(300.dp))
+          Text(text = "Logged in!", fontSize = 30.sp)
+          Spacer(modifier = Modifier.height(50.dp))
 
-                    Text(
-                        text = "Identityscheme:",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(10.dp)
-                    )
-                    Text(text = loginState.identityscheme)
+          Text(
+            text = "Identityscheme:",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(10.dp),
+          )
+          Text(text = loginState.identityscheme)
 
-                    Text(
-                        text = "Sub:",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(10.dp)
-                    )
-                    Text(text = loginState.sub)
+          Text(
+            text = "Sub:",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(10.dp),
+          )
+          Text(text = loginState.sub)
 
-                    Spacer(modifier = Modifier.height(10.dp))
+          Spacer(modifier = Modifier.height(10.dp))
 
-                    Text(
-                        text = "Name:",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(10.dp)
-                    )
-                    Text(text = loginState.name ?: "")
-                }
-            }
-            Button(
-                { onLogout?.invoke() },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 10.dp)
-            ) {
-                Text("Log out")
-            }
+          Text(
+            text = "Name:",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(10.dp),
+          )
+          Text(text = loginState.name ?: "")
         }
+      }
+      Button(
+        { onLogout?.invoke() },
+        modifier =
+          Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 10.dp),
+      ) {
+        Text("Log out")
+      }
     }
+  }
 }
 
 class LoginStateViewModelNotLoggedInProvider : PreviewParameterProvider<LoginState.NotLoggedIn> {
-    override val values = listOf(
-        LoginState.NotLoggedIn(),
+  override val values =
+    listOf(
+      LoginState.NotLoggedIn(),
     ).asSequence()
 }
 
 @Preview(showBackground = true)
 @Composable
 fun LoginScreen(
-    @PreviewParameter(LoginStateViewModelNotLoggedInProvider::class) loginState: LoginState.NotLoggedIn,
-    onLogin: ((String) -> Unit)? = null
+  @PreviewParameter(LoginStateViewModelNotLoggedInProvider::class) loginState:
+    LoginState.NotLoggedIn,
+  onLogin: ((String) -> Unit)? = null,
 ) {
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
+  Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+    Box(
+      modifier =
+        Modifier
+          .padding(innerPadding)
+          .fillMaxSize(),
+    ) {
+      Row(
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxSize(),
+      ) {
+        Column(
+          verticalArrangement = Arrangement.Center,
+          horizontalAlignment = Alignment.CenterHorizontally,
+          modifier = Modifier.width(200.dp),
         ) {
-            Row(
-                horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.width(200.dp)
-                ) {
-                    Spacer(modifier = Modifier.height(300.dp))
-                    val buttonModifier = Modifier.fillMaxWidth()
+          Spacer(modifier = Modifier.height(300.dp))
+          val buttonModifier = Modifier.fillMaxWidth()
 
-                    Text(text = "Login", fontSize = 30.sp)
-                    Spacer(modifier = Modifier.height(50.dp))
+          Text(text = "Login", fontSize = 30.sp)
+          Spacer(modifier = Modifier.height(50.dp))
 
-                    val errorMessage = loginState.errorMessage
-                    if (errorMessage != null) {
-                        Text(text = errorMessage)
-                        Spacer(modifier = Modifier.height(50.dp))
-                    }
+          val errorMessage = loginState.errorMessage
+          if (errorMessage != null) {
+            Text(text = errorMessage)
+            Spacer(modifier = Modifier.height(50.dp))
+          }
 
-                    Button(onClick = {
-                        onLogin?.invoke("urn:grn:authn:mock")
-                    }, modifier = buttonModifier) {
-                        Text(text = "Login with Mock")
-                    }
+          Button(onClick = {
+            onLogin?.invoke("urn:grn:authn:mock")
+          }, modifier = buttonModifier) {
+            Text(text = "Login with Mock")
+          }
 
-                    Button(onClick = {
-                        onLogin?.invoke("urn:grn:authn:dk:mitid:substantial")
-                    }, modifier = buttonModifier) {
-                        Text(text = "Login with MitID")
-                    }
+          Button(onClick = {
+            onLogin?.invoke("urn:grn:authn:dk:mitid:substantial")
+          }, modifier = buttonModifier) {
+            Text(text = "Login with MitID")
+          }
 
-                    Button(onClick = {
-                        onLogin?.invoke("urn:grn:authn:se:bankid")
-                    }, modifier = buttonModifier) {
-                        Text(text = "Login with SE BankID")
-                    }
+          Button(onClick = {
+            onLogin?.invoke("urn:grn:authn:se:bankid")
+          }, modifier = buttonModifier) {
+            Text(text = "Login with SE BankID")
+          }
 
-                    Button(onClick = {
-                        onLogin?.invoke("urn:grn:authn:no:bankid:substantial")
-                    }, modifier = buttonModifier) {
-                        Text(text = "Login with NO BankID")
-                    }
-                }
-            }
+          Button(onClick = {
+            onLogin?.invoke("urn:grn:authn:no:bankid:substantial")
+          }, modifier = buttonModifier) {
+            Text(text = "Login with NO BankID")
+          }
         }
+      }
     }
+  }
 }
