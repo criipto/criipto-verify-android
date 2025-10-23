@@ -29,9 +29,15 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.criipto.verify.eid.DanishMitID
+import com.criipto.verify.eid.EID
+import com.criipto.verify.eid.Mock
+import com.criipto.verify.eid.NorwegianBankID
+import com.criipto.verify.eid.SwedishBankID
 import com.criipto.verifyexample.ui.LoginState
 import com.criipto.verifyexample.ui.LoginViewModel
 import com.criipto.verifyexample.ui.theme.CriiptoVerifyAndroidTheme
+import kotlinx.serialization.Serializable
 
 class MainActivity : ComponentActivity() {
   val loginViewModel = LoginViewModel(LoginState.NotLoggedIn(), this)
@@ -181,7 +187,7 @@ class LoginStateViewModelNotLoggedInProvider : PreviewParameterProvider<LoginSta
 fun LoginScreen(
   @PreviewParameter(LoginStateViewModelNotLoggedInProvider::class) loginState:
     LoginState.NotLoggedIn,
-  onLogin: ((String) -> Unit)? = null,
+  onLogin: ((EID<*>) -> Unit)? = null,
 ) {
   Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
     Box(
@@ -197,7 +203,7 @@ fun LoginScreen(
         Column(
           verticalArrangement = Arrangement.Center,
           horizontalAlignment = Alignment.CenterHorizontally,
-          modifier = Modifier.width(200.dp),
+          modifier = Modifier.width(300.dp),
         ) {
           Spacer(modifier = Modifier.height(300.dp))
           val buttonModifier = Modifier.fillMaxWidth()
@@ -211,26 +217,34 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(50.dp))
           }
 
+          @Serializable
+          data class MockData(
+            val name: String,
+          )
           Button(onClick = {
-            onLogin?.invoke("urn:grn:authn:mock")
+            onLogin?.invoke(Mock().withMockData(MockData(name = "foobar")))
           }, modifier = buttonModifier) {
             Text(text = "Login with Mock")
           }
 
           Button(onClick = {
-            onLogin?.invoke("urn:grn:authn:dk:mitid:substantial")
+            onLogin?.invoke(
+              DanishMitID
+                .substantial()
+                .withMessage("hello!"),
+            )
           }, modifier = buttonModifier) {
             Text(text = "Login with MitID")
           }
 
           Button(onClick = {
-            onLogin?.invoke("urn:grn:authn:se:bankid")
+            onLogin?.invoke(SwedishBankID.sameDevice().withMessage("hello!"))
           }, modifier = buttonModifier) {
             Text(text = "Login with SE BankID")
           }
 
           Button(onClick = {
-            onLogin?.invoke("urn:grn:authn:no:bankid:substantial")
+            onLogin?.invoke(NorwegianBankID.substantial())
           }, modifier = buttonModifier) {
             Text(text = "Login with NO BankID")
           }

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.auth0.android.jwt.JWT
 import com.criipto.verify.CriiptoVerify
+import com.criipto.verify.eid.EID
 import com.criipto.verifyexample.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,7 +55,7 @@ class LoginViewModel(
     }
   }
 
-  fun login(eid: String) =
+  fun login(eid: EID<*>) =
     viewModelScope.launch {
       _uiState.update { LoginState.Loading() }
       try {
