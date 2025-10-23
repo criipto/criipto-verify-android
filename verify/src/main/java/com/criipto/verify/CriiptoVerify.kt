@@ -2,6 +2,7 @@ package com.criipto.verify
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -228,6 +229,19 @@ class CriiptoVerify private constructor(
       )
   }
 
+  private fun verifyAppLink(uri: Uri) {
+    val intent = Intent()
+    intent.data = uri
+    intent.action = Intent.ACTION_VIEW
+    intent.addCategory(Intent.CATEGORY_DEFAULT)
+    intent.addCategory(Intent.CATEGORY_BROWSABLE)
+    intent.`package` = activity.applicationContext.packageName
+
+    if (intent.resolveActivity(activity.packageManager) == null) {
+      throw Error("App link is not correctly configured for $uri")
+    }
+  }
+
   override fun onCreate(owner: LifecycleOwner) {
     tabType =
       if (CustomTabsClient.isAuthTabSupported(
@@ -239,6 +253,11 @@ class CriiptoVerify private constructor(
       } else {
         TabType.CustomTab
       }
+
+    if (tabType == TabType.CustomTab) {
+      verifyAppLink(redirectUri)
+    }
+    verifyAppLink(appSwitchUri)
 
     val enabledBrowsers =
       listOf(
