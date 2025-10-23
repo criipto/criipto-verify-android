@@ -18,6 +18,7 @@ import com.auth0.jwk.UrlJwkProvider
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.auth0.jwt.exceptions.JWTVerificationException
+import com.criipto.verify.eid.EID
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
@@ -422,15 +423,18 @@ class CriiptoVerify private constructor(
     }
   }
 
-  suspend fun login(acr_value: String): String {
-    Log.i(TAG, "Starting login with $acr_value")
+  suspend fun login(eid: EID<*>): String {
+    Log.i(TAG, "Starting login with ${eid.acrValue}")
 
     val loginHints =
-      listOf(
-        "appswitch:android",
-        "appswitch:resumeUrl:$appSwitchUri",
-        "mobile:continue_button:never",
-      )
+      eid.loginHints +
+        listOf(
+          "appswitch:android",
+          "appswitch:resumeUrl:$appSwitchUri",
+          "mobile:continue_button:never",
+        )
+
+    val scopes = eid.scopes + listOf("openid")
 
     val authorizationRequest =
       AuthorizationRequest
@@ -439,9 +443,9 @@ class CriiptoVerify private constructor(
           clientID,
           ResponseTypeValues.CODE,
           redirectUri,
-        ).setScope((listOf("openid")).joinToString(" "))
+        ).setScope(scopes.joinToString(" "))
         .setPrompt("login")
-        .setAdditionalParameters(mapOf("acr_values" to acr_value))
+        .setAdditionalParameters(mapOf("acr_values" to eid.acrValue))
         .setLoginHint(loginHints.joinToString(" "))
         .build()
 
