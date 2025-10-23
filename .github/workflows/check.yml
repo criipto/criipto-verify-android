@@ -20,4 +20,7 @@ jobs:
       - name: Run ktlint check
         uses: burrunan/gradle-cache-action@v3
         with:
-          arguments: ktlintCheck
+          arguments: |
+            ktlintCheck
+            -PcriiptoDomain=${{ secrets.CRIIPTO_VERIFY_DOMAIN }}
+            -PcriiptoClientId=${{ secrets.CRIIPTO_VERIFY_CLIENT_ID }}
