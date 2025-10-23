@@ -13,8 +13,9 @@ android {
     version = release(36)
   }
 
-  val criiptoDomain = "YOUR CRIIPTO DOMAIN, WITHTOUT HTTPS"
-  val criiptoClientId = "YOUR CLIENT ID"
+  val criiptoDomain = providers.gradleProperty("criiptoDomain").get()
+  val criiptoClientId = providers.gradleProperty("criiptoClientId").get()
+
   defaultConfig {
     applicationId = "com.criipto.verifyexample"
     minSdk = 29
