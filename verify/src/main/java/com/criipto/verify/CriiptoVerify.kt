@@ -215,6 +215,13 @@ class CriiptoVerify(
         TabType.CustomTab
       }
 
+    if (tabType == TabType.CustomTab) {
+      verifyAppLink(redirectUri)
+    }
+    if (appSwitchUri != null) {
+      verifyAppLink(appSwitchUri)
+    }
+
     val browserMatcher =
       when (tabType) {
         // When using an auth tab, we do not need the internal browser matching logic from appauth
@@ -276,6 +283,24 @@ class CriiptoVerify(
             browserMatcher,
           ).build(),
       )
+  }
+
+  /**
+   * Verify that app links are correctly configured to open in the consuming application.
+   */
+  private fun verifyAppLink(uri: Uri) {
+    val intent =
+      Intent().apply {
+        data = uri
+        action = Intent.ACTION_VIEW
+        addCategory(Intent.CATEGORY_DEFAULT)
+        addCategory(Intent.CATEGORY_BROWSABLE)
+        `package` = activity.packageName
+      }
+
+    if (intent.resolveActivity(activity.packageManager) == null) {
+      Log.w(TAG, "App link is not correctly configured for $uri")
+    }
   }
 
   override fun onDestroy(owner: LifecycleOwner) {
