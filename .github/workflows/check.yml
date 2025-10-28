@@ -24,3 +24,10 @@ jobs:
             ktlintCheck
             -PcriiptoDomain=${{ secrets.CRIIPTO_VERIFY_DOMAIN }}
             -PcriiptoClientId=${{ secrets.CRIIPTO_VERIFY_CLIENT_ID }}
+      - name: Run unit tests
+        uses: burrunan/gradle-cache-action@v3
+        with:
+          arguments: |
+            test
+            -PcriiptoDomain=${{ secrets.CRIIPTO_VERIFY_DOMAIN }}
+            -PcriiptoClientId=${{ secrets.CRIIPTO_VERIFY_CLIENT_ID }}
