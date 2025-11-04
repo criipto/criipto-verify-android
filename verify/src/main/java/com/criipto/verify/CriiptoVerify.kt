@@ -227,47 +227,46 @@ class CriiptoVerify private constructor(
         TabType.CustomTab
       }
 
-    val enabledBrowsers =
-      listOf(
-        Browsers.Chrome.PACKAGE_NAME,
-        Browsers.SBrowser.PACKAGE_NAME,
-        BRAVE,
-        EDGE,
-      ).associateWith {
-        (
-          CustomTabsClient.getPackageName(
-            activity,
-            listOf(it),
-            true,
-          ) != null
-        )
-      }
-
-    val browserMatcher: BrowserMatcher =
+    val browserMatcher =
       when (tabType) {
         // When using an auth tab, we do not need the internal browser matching logic from appauth
         TabType.AuthTab -> {
           Log.i(TAG, "Using Chrome with auth tab")
           BrowserMatcher { false }
         }
-        TabType.CustomTab ->
-          if (enabledBrowsers[Browsers.Chrome.PACKAGE_NAME] == true) {
-            Log.i(TAG, "Using Chrome with custom tab")
-            VersionedBrowserMatcher.CHROME_CUSTOM_TAB
-          } else if (enabledBrowsers[Browsers.SBrowser.PACKAGE_NAME] == true) {
-            Log.i(TAG, "Using Samsung browser with custom tab")
-            VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB
-          } else if (enabledBrowsers[BRAVE] == true) {
-            Log.i(TAG, "Using Brave with custom tab")
-            BrowserMatcher { descriptor -> descriptor.packageName === BRAVE }
-          } else if (enabledBrowsers[EDGE] == true) {
-            Log.i(TAG, "Using Edge with custom tab")
-            BrowserMatcher { descriptor -> descriptor.packageName === EDGE }
-          } else {
-            Log.i(TAG, "Falling back to any browser")
-            // Fallback to any browser. TODO: maybe disable via flag?
-            AnyBrowserMatcher.INSTANCE
-          }
+        TabType.CustomTab -> {
+          val preferredBrowser =
+            listOf(
+              Pair(Browsers.Chrome.PACKAGE_NAME, VersionedBrowserMatcher.CHROME_CUSTOM_TAB),
+              Pair(Browsers.SBrowser.PACKAGE_NAME, VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB),
+              Pair(BRAVE, BrowserMatcher { it.packageName === BRAVE }),
+              Pair(EDGE, BrowserMatcher { it.packageName === EDGE }),
+            ).find {
+              // Find the first of our preferred browsers, which is able to open a custom tab.
+              CustomTabsClient.getPackageName(
+                activity,
+                listOf(it.first),
+                true,
+              ) != null
+            }
+
+          val (browserName, browserMatcher) =
+            // If we found any of our preferred browsers above, use that.
+            preferredBrowser
+              // Otherwise, fall back to the default browser
+              ?: Pair(
+                CustomTabsClient.getPackageName(
+                  activity,
+                  emptyList(),
+                )!!,
+                AnyBrowserMatcher.INSTANCE,
+              )
+
+          // TODO: error if there are no browsers that can handle custom tabs!
+
+          Log.i(TAG, "Using $browserName with custom tab")
+          browserMatcher
+        }
       }
 
     authorizationService =
