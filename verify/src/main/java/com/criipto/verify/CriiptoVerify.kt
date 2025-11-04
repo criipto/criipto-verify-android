@@ -31,17 +31,16 @@ import io.ktor.http.content.OutgoingContent
 import io.ktor.http.formUrlEncode
 import io.ktor.http.parametersOf
 import io.ktor.serialization.kotlinx.json.json
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import net.openid.appauth.AppAuthConfiguration
 import net.openid.appauth.AuthorizationException
 import net.openid.appauth.AuthorizationManagementActivity
 import net.openid.appauth.AuthorizationManagementRequest
+import net.openid.appauth.AuthorizationManagementResponse
 import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
@@ -128,21 +127,6 @@ class CriiptoVerify private constructor(
    */
   private var customTabIntentLauncher:
     ActivityResultLauncher<Pair<AuthorizationManagementRequest, Uri>>
-
-  /**
-   * The currently in-flight request - Either an authorization or an end session request.
-   */
-  private var currentRequest: AuthorizationManagementRequest? = null
-
-  /**
-   * The continuation that should be invoked when a login request completes
-   */
-  private var loginRequestContinuation: Continuation<String>? = null
-
-  /**
-   * The continuation that should be invoked when a logout request completes
-   */
-  private var logoutRequestContinuation: Continuation<Unit>? = null
 
   companion object {
     suspend fun create(
@@ -301,101 +285,9 @@ class CriiptoVerify private constructor(
     httpClient.close()
   }
 
-  private fun handleResultUri(uri: Uri) {
-    val currentRequest = this.currentRequest
-    if (currentRequest == null) {
-      Log.d(TAG, "Got a result URI $uri, but no active request.")
-      return
-    }
+  private fun handleResultUri(uri: Uri) = browserFlowContinuation?.resume(uri)
 
-    val response =
-      when (currentRequest) {
-        is AuthorizationRequest ->
-          AuthorizationResponse
-            .Builder(currentRequest)
-            .fromUri(uri)
-            .build()
-
-        is EndSessionRequest ->
-          EndSessionResponse
-            .Builder(currentRequest)
-            .setState(
-              uri.getQueryParameter(
-                "state",
-              ),
-            ).build()
-
-        else -> {
-          Log.d(TAG, "Unsupported request type $currentRequest")
-          return
-        }
-      }
-
-    if (currentRequest.state != response.state) {
-      Log.w(
-        TAG,
-        "State returned in authorization response (${response.state}) does not match state from request (${currentRequest.state}) - discarding response",
-      )
-      return
-    }
-
-    when (response) {
-      is AuthorizationResponse -> {
-        CoroutineScope(Dispatchers.IO).launch {
-          authorizationService.performTokenRequest(
-            response.createTokenExchangeRequest(),
-          ) { response, ex ->
-            if (ex != null) {
-              loginRequestContinuation?.resumeWithException(ex)
-              return@performTokenRequest
-            }
-
-            // From TokenResponseCallback - Exactly one of `response` or `ex` will be non-null. So
-            // when we reach this line, we know that response is not null.
-            val idToken = response!!.idToken!!
-            val decodedJWT = JWT.decode(idToken)
-
-            val keyId = decodedJWT.getHeaderClaim("kid").asString()
-            val key = jwks?.find { it.id == keyId }
-
-            if (key == null) {
-              loginRequestContinuation?.resumeWithException(Exception("Unknown key $keyId"))
-              return@performTokenRequest
-            }
-
-            try {
-              val algorithm = Algorithm.RSA256(key.publicKey as RSAPublicKey)
-              val verifier =
-                JWT
-                  .require(algorithm)
-                  .withIssuer(domain.toString())
-                  // Do not throw on JWTs with iat "in the future". This can easily happen due to clock skew, see https://github.com/auth0/java-jwt/issues/467
-                  .ignoreIssuedAt()
-                  .acceptNotBefore(5) // Add five seconds of leeway when validating nbf.
-                  .build()
-
-              verifier.verify(idToken)
-              loginRequestContinuation?.resume(idToken)
-            } catch (exception: JWTVerificationException) {
-              loginRequestContinuation?.resumeWithException(exception)
-            }
-          }
-        }
-      }
-
-      is EndSessionResponse -> logoutRequestContinuation?.resume(Unit)
-    }
-
-    this.currentRequest = null
-  }
-
-  private fun handleException(ex: Exception) {
-    if (currentRequest is AuthorizationRequest) {
-      loginRequestContinuation?.resumeWithException(ex)
-    } else if (currentRequest is EndSessionRequest) {
-      logoutRequestContinuation?.resumeWithException(ex)
-    }
-  }
+  private fun handleException(ex: Exception) = browserFlowContinuation?.resumeWithException(ex)
 
   private fun handleCustomTabResult(result: CustomTabResult) {
     Log.i(TAG, "Handling custom tab result $result")
@@ -456,24 +348,102 @@ class CriiptoVerify private constructor(
 
     val parRequestUri = pushAuthorizationRequest(authorizationRequest)
 
-    return suspendCoroutine { continuation ->
-      loginRequestContinuation = continuation
-      launchBrowser(authorizationRequest, parRequestUri)
-    }
+    val callbackUri = launchBrowser(authorizationRequest, parRequestUri)
+
+    return exchangeCode(authorizationRequest, callbackUri)
   }
 
-  suspend fun logout(idToken: String?) =
+  private suspend fun exchangeCode(
+    request: AuthorizationRequest,
+    callbackUri: Uri,
+  ): String =
     suspendCoroutine { continuation ->
-      logoutRequestContinuation = continuation
+      val response =
+        AuthorizationResponse
+          .Builder(request)
+          .fromUri(callbackUri)
+          .build()
 
-      launchBrowser(
-        EndSessionRequest
-          .Builder(serviceConfiguration)
-          .setIdTokenHint(idToken)
-          .setPostLogoutRedirectUri(redirectUri)
-          .build(),
-      )
+      if (!validateState(request, response)) {
+        continuation.resumeWithException(Exception("State mismatch"))
+        return@suspendCoroutine
+      }
+
+      authorizationService.performTokenRequest(
+        response.createTokenExchangeRequest(),
+      ) { tokenResponse, ex ->
+        if (ex != null) {
+          continuation.resumeWithException(ex)
+          return@performTokenRequest
+        }
+
+        // From TokenResponseCallback - Exactly one of `response` or `ex` will be non-null. So
+        // when we reach this line, we know that response is not null.
+        val idToken = tokenResponse!!.idToken!!
+        val decodedJWT = JWT.decode(idToken)
+
+        val keyId = decodedJWT.getHeaderClaim("kid").asString()
+        val key = jwks?.find { it.id == keyId }
+
+        if (key == null) {
+          continuation.resumeWithException(Exception("Unknown key $keyId"))
+          return@performTokenRequest
+        }
+
+        try {
+          val algorithm = Algorithm.RSA256(key.publicKey as RSAPublicKey)
+          val verifier =
+            JWT
+              .require(algorithm)
+              .withIssuer(domain.toString())
+              // Do not throw on JWTs with iat "in the future". This can easily happen due to clock skew, see https://github.com/auth0/java-jwt/issues/467
+              .ignoreIssuedAt()
+              .acceptNotBefore(5) // Add five seconds of leeway when validating nbf.
+              .build()
+
+          verifier.verify(idToken)
+          continuation.resume(idToken)
+        } catch (exception: JWTVerificationException) {
+          continuation.resumeWithException(exception)
+        }
+      }
     }
+
+  private fun validateState(
+    request: AuthorizationManagementRequest,
+    response: AuthorizationManagementResponse,
+  ): Boolean {
+    if (request.state != response.state) {
+      Log.w(
+        TAG,
+        "State returned in authorization response (${response.state}) does not match state from request (${request.state}) - discarding response",
+      )
+      return false
+    }
+    return true
+  }
+
+  suspend fun logout(idToken: String?) {
+    val endSessionRequest =
+      EndSessionRequest
+        .Builder(serviceConfiguration)
+        .setIdTokenHint(idToken)
+        .setPostLogoutRedirectUri(redirectUri)
+        .build()
+
+    val callbackUri = launchBrowser(endSessionRequest)
+
+    val response =
+      EndSessionResponse
+        .Builder(endSessionRequest)
+        .setState(
+          callbackUri.getQueryParameter(
+            "state",
+          ),
+        ).build()
+
+    validateState(endSessionRequest, response)
+  }
 
   /**
    * Starts the PAR flow, as described in https://datatracker.ietf.org/doc/html/rfc9126
@@ -522,11 +492,16 @@ class CriiptoVerify private constructor(
         ).build()
     }
 
-  private fun launchBrowser(
+  /**
+   * The continuation that should be invoked when control returns from the browser to this library.
+   */
+  private var browserFlowContinuation: Continuation<Uri>? = null
+
+  private suspend fun launchBrowser(
     request: AuthorizationManagementRequest,
     uri: Uri = request.toUri(),
-  ) {
-    this.currentRequest = request
+  ) = suspendCoroutine { continuation ->
+    browserFlowContinuation = continuation
 
     if (tabType == TabType.AuthTab) {
       // Open the Authorization URI in an Auth Tab if supported by chrome
