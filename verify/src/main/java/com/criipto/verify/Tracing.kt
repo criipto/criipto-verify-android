@@ -4,14 +4,21 @@ import android.os.Build
 import android.util.Log
 import com.fasterxml.uuid.Generators
 import io.ktor.client.HttpClient
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.opentelemetry.api.common.AttributeKey
+import io.opentelemetry.api.trace.SpanBuilder
 import io.opentelemetry.api.trace.StatusCode
 import io.opentelemetry.api.trace.Tracer
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator
 import io.opentelemetry.context.Context
+import io.opentelemetry.context.propagation.ContextPropagators
+import io.opentelemetry.context.propagation.TextMapSetter
+import io.opentelemetry.extension.kotlin.asContextElement
 import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.common.CompletableResultCode
 import io.opentelemetry.sdk.trace.IdGenerator
@@ -24,6 +31,8 @@ import io.opentelemetry.sdk.trace.export.BatchSpanProcessor
 import io.opentelemetry.sdk.trace.export.SpanExporter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -202,7 +211,9 @@ internal class Tracing(
   private val sdk =
     OpenTelemetrySdk
       .builder()
-      .setTracerProvider(
+      .setPropagators(
+        ContextPropagators.create(W3CTraceContextPropagator.getInstance()),
+      ).setTracerProvider(
         SdkTracerProvider
           .builder()
           .setIdGenerator(
@@ -222,4 +233,78 @@ internal class Tracing(
     instrumentationScopeName: String,
     instrumentationScopeVersion: String,
   ): Tracer = sdk.getTracer(instrumentationScopeName, instrumentationScopeVersion)
+
+  fun propagators(): ContextPropagators = sdk.propagators
+}
+
+internal object KtorRequestSetter : TextMapSetter<HttpRequestBuilder> {
+  override fun set(
+    carrier: HttpRequestBuilder?,
+    key: String,
+    value: String,
+  ) {
+    carrier?.header(key, value)
+  }
+}
+
+/**
+ * Utility function which wraps a block of code in a span:
+ * 1. Start the span
+ * 2. Make it the current span
+ * 3. Execute the block of code
+ *    a. If the block completes, set status to OK
+ *    b. Otherwise, set status to ERROR
+ * 4. Close the current scope
+ * 5. End the span
+ *
+ * This is very similar to `ExtendedSpanBuilder.startAndRun` https://github.com/open-telemetry/opentelemetry-java/blob/36ca9b85b799939b6cb650c5fe95e90ee2f87059/sdk/trace/src/main/java/io/opentelemetry/sdk/trace/ExtendedSdkSpanBuilder.java#L156
+ * from the OTEL SDK, with two notable exceptions:
+ * 1. It sets status to OK when the block completes successfully
+ * 2. It supports suspend functions
+ */
+
+internal inline fun <T> SpanBuilder.startAndRun(block: () -> T): T {
+  val span = this.startSpan()
+
+  try {
+    val result =
+      span.makeCurrent().use {
+        block()
+      }
+
+    span.setStatus(StatusCode.OK)
+    return result
+  } catch (exception: Exception) {
+    span.setStatus(StatusCode.ERROR, exception.message ?: "")
+    span.recordException(exception)
+    throw exception
+  } finally {
+    span.end()
+  }
+}
+
+// kotlin 2.20 provides [Improved overload resolution for lambdas with suspend function types](https://kotlinlang.org/docs/whatsnew2220.html#improved-overload-resolution-for-lambdas-with-suspend-function-types)
+// However, it does not work for functions with generics. So we create two different functions, instead of overloading.
+internal suspend inline fun <T> SpanBuilder.startAndRunSuspend(
+  crossinline block: suspend () -> T,
+): T {
+  val span = this.startSpan()
+
+  try {
+    val result =
+      coroutineScope {
+        async(span.asContextElement()) {
+          block()
+        }
+      }.await()
+
+    span.setStatus(StatusCode.OK)
+    return result
+  } catch (exception: Exception) {
+    span.setStatus(StatusCode.ERROR, exception.message ?: "")
+    span.recordException(exception)
+    throw exception
+  } finally {
+    span.end()
+  }
 }
