@@ -5,6 +5,10 @@ plugins {
 }
 
 android {
+  buildFeatures {
+    buildConfig = true
+  }
+
   namespace = "com.criipto.verify"
   compileSdk {
     version = release(36)
@@ -15,6 +19,9 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     consumerProguardFiles("consumer-rules.pro")
+    val version = "0.0.1"
+    buildConfigField("String", "VERSION", "\"$version\"")
+    setVersion(version)
   }
 
   buildTypes {
