@@ -57,6 +57,13 @@ dependencies {
   implementation(libs.kotlinx.serialization)
   implementation(libs.ktor.serialization.kotlinx.json)
 
+  implementation(platform(libs.opentelemetry.bom))
+  implementation(libs.opentelemetry.api)
+  implementation(libs.opentelemetry.sdk)
+  implementation(libs.opentelemetry.extension.kotlin)
+
+  implementation(libs.java.uuid.generator)
+
   testImplementation(libs.junit)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
