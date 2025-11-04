@@ -447,49 +447,46 @@ class CriiptoVerify private constructor(
   /**
    * Starts the PAR flow, as described in https://datatracker.ietf.org/doc/html/rfc9126
    */
-  private suspend fun pushAuthorizationRequest(authorizationRequest: AuthorizationRequest): Uri =
-    withContext(
-      Dispatchers.IO,
-    ) {
-      val response =
-        httpClient.submitForm(
-          serviceConfiguration.discoveryDoc!!
-            .docJson
-            .get(
-              "pushed_authorization_request_endpoint",
-            ).toString(),
-        ) {
-          // The FormDataContent class appends ; charset=UTF-8 to the content-type, which Verify does not like. So we create our own type
-          setBody(
-            object : OutgoingContent.ByteArrayContent() {
-              override val contentType =
-                ContentType.Application.FormUrlEncoded.withoutParameters()
+  private suspend fun pushAuthorizationRequest(authorizationRequest: AuthorizationRequest): Uri {
+    val response =
+      httpClient.submitForm(
+        serviceConfiguration.discoveryDoc!!
+          .docJson
+          .get(
+            "pushed_authorization_request_endpoint",
+          ).toString(),
+      ) {
+        // The FormDataContent class appends ; charset=UTF-8 to the content-type, which Verify does not like. So we create our own type
+        setBody(
+          object : OutgoingContent.ByteArrayContent() {
+            override val contentType =
+              ContentType.Application.FormUrlEncoded.withoutParameters()
 
-              override fun bytes() =
-                parametersOf(
-                  authorizationRequest.toUri().queryParameterNames.associateWith {
-                    listOf(authorizationRequest.toUri().getQueryParameter(it)!!)
-                  },
-                ).formUrlEncode().toByteArray()
-            },
-          )
-        }
+            override fun bytes() =
+              parametersOf(
+                authorizationRequest.toUri().queryParameterNames.associateWith {
+                  listOf(authorizationRequest.toUri().getQueryParameter(it)!!)
+                },
+              ).formUrlEncode().toByteArray()
+          },
+        )
+      }
 
-      @Serializable()
-      data class ParResponse(
-        val request_uri: String,
-        val expires_in: Int,
-      )
-      val parsedResponse = response.body<ParResponse>()
+    @Serializable()
+    data class ParResponse(
+      val request_uri: String,
+      val expires_in: Int,
+    )
+    val parsedResponse = response.body<ParResponse>()
 
-      serviceConfiguration.authorizationEndpoint
-        .buildUpon()
-        .appendQueryParameter("client_id", clientID)
-        .appendQueryParameter(
-          "request_uri",
-          parsedResponse.request_uri,
-        ).build()
-    }
+    return serviceConfiguration.authorizationEndpoint
+      .buildUpon()
+      .appendQueryParameter("client_id", clientID)
+      .appendQueryParameter(
+        "request_uri",
+        parsedResponse.request_uri,
+      ).build()
+  }
 
   /**
    * The continuation that should be invoked when control returns from the browser to this library.
