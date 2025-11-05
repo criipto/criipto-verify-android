@@ -12,6 +12,7 @@ import androidx.browser.customtabs.CustomTabsClient
 import androidx.core.net.toUri
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.auth0.jwk.Jwk
 import com.auth0.jwk.UrlJwkProvider
 import com.auth0.jwt.JWT
@@ -32,7 +33,7 @@ import io.ktor.serialization.kotlinx.json.json
 import io.opentelemetry.api.trace.Span
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import net.openid.appauth.AppAuthConfiguration
@@ -80,11 +81,11 @@ sealed class CustomTabResult {
   ) : CustomTabResult()
 }
 
-class CriiptoVerify private constructor(
+class CriiptoVerify(
   private val clientID: String,
   private val domain: Uri,
-  private val redirectUri: Uri,
-  private val appSwitchUri: Uri,
+  private val redirectUri: Uri = "$domain/android/callback".toUri(),
+  private val appSwitchUri: Uri = "$domain/android/callback/appswitch".toUri(),
   private val activity: ComponentActivity,
 ) : DefaultLifecycleObserver {
   private val httpClient =
@@ -134,25 +135,6 @@ class CriiptoVerify private constructor(
     tracing.getTracer(BuildConfig.LIBRARY_PACKAGE_NAME, BuildConfig.VERSION)
 
   private lateinit var browserDescription: String
-
-  companion object {
-    suspend fun create(
-      clientID: String,
-      domain: Uri,
-      redirectUri: Uri = "$domain/android/callback".toUri(),
-      appSwitchUri: Uri = "$domain/android/callback/appswitch".toUri(),
-      activity: ComponentActivity,
-    ): CriiptoVerify {
-      val criiptoVerify = CriiptoVerify(clientID, domain, redirectUri, appSwitchUri, activity)
-
-      coroutineScope {
-        async { criiptoVerify.fetchCriiptoOIDCConfiguration() }
-        async { criiptoVerify.fetchCriiptoJWKS() }
-      }.await()
-
-      return criiptoVerify
-    }
-  }
 
   init {
     for (uri in listOf(domain, redirectUri, appSwitchUri)) {
@@ -219,6 +201,12 @@ class CriiptoVerify private constructor(
         },
         this::handleCustomTabResult,
       )
+
+    // Load the OIDC config and JWKS configuration, so it is ready when the user initiates a login
+    activity.lifecycleScope.launch {
+      async { runCatching { fetchCriiptoOIDCConfiguration() } }
+      async { runCatching { fetchCriiptoJWKS() } }
+    }
   }
 
   override fun onCreate(owner: LifecycleOwner) {
