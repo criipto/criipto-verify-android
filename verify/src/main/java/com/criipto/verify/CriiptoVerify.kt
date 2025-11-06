@@ -12,7 +12,7 @@ import androidx.browser.customtabs.CustomTabsClient
 import androidx.core.net.toUri
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.auth0.jwk.Jwk
+import androidx.lifecycle.lifecycleScope
 import com.auth0.jwk.UrlJwkProvider
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
@@ -30,9 +30,11 @@ import io.ktor.http.formUrlEncode
 import io.ktor.http.parametersOf
 import io.ktor.serialization.kotlinx.json.json
 import io.opentelemetry.api.trace.Span
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import net.openid.appauth.AppAuthConfiguration
@@ -80,11 +82,11 @@ sealed class CustomTabResult {
   ) : CustomTabResult()
 }
 
-class CriiptoVerify private constructor(
+class CriiptoVerify(
   private val clientID: String,
   private val domain: Uri,
-  private val redirectUri: Uri,
-  private val appSwitchUri: Uri,
+  private val redirectUri: Uri = "$domain/android/callback".toUri(),
+  private val appSwitchUri: Uri = "$domain/android/callback/appswitch".toUri(),
   private val activity: ComponentActivity,
 ) : DefaultLifecycleObserver {
   private val httpClient =
@@ -101,20 +103,10 @@ class CriiptoVerify private constructor(
   private lateinit var authorizationService: AuthorizationService
 
   /**
-   * The OIDC service configuration for your Criipto domain. Loaded in `create()`
-   */
-  private lateinit var serviceConfiguration: AuthorizationServiceConfiguration
-
-  /**
    * The type of browser tab to user, either custom tab or auth tab.
    * Determining the supported browser requires an activity, so this is set in `onCreate`.
    */
   private lateinit var tabType: TabType
-
-  /**
-   * The JWKS (JSON Web Key Set) used by Criipto to sign the returned JWT. Loaded in `create()`
-   * */
-  private var jwks: List<Jwk>? = null
 
   /**
    * An activity result launcher, used to a launch an auth tab intent and listen for the result.
@@ -134,25 +126,9 @@ class CriiptoVerify private constructor(
     tracing.getTracer(BuildConfig.LIBRARY_PACKAGE_NAME, BuildConfig.VERSION)
 
   private lateinit var browserDescription: String
-
-  companion object {
-    suspend fun create(
-      clientID: String,
-      domain: Uri,
-      redirectUri: Uri = "$domain/android/callback".toUri(),
-      appSwitchUri: Uri = "$domain/android/callback/appswitch".toUri(),
-      activity: ComponentActivity,
-    ): CriiptoVerify {
-      val criiptoVerify = CriiptoVerify(clientID, domain, redirectUri, appSwitchUri, activity)
-
-      coroutineScope {
-        async { criiptoVerify.fetchCriiptoOIDCConfiguration() }
-        async { criiptoVerify.fetchCriiptoJWKS() }
-      }.await()
-
-      return criiptoVerify
-    }
-  }
+  private val getCriiptoJWKS = cacheResult(activity.lifecycleScope, this::loadCriiptoJWKS)
+  private val getCriiptoOIDCConfiguration =
+    cacheResult(activity.lifecycleScope, this::loadCriiptoOIDCConfiguration)
 
   init {
     for (uri in listOf(domain, redirectUri, appSwitchUri)) {
@@ -219,6 +195,12 @@ class CriiptoVerify private constructor(
         },
         this::handleCustomTabResult,
       )
+
+    // Load the OIDC config and JWKS configuration, so it is ready when the user initiates a login
+    activity.lifecycleScope.launch {
+      async { runCatching { getCriiptoOIDCConfiguration() } }
+      async { runCatching { getCriiptoJWKS() } }
+    }
   }
 
   override fun onCreate(owner: LifecycleOwner) {
@@ -359,7 +341,7 @@ class CriiptoVerify private constructor(
         val authorizationRequest =
           AuthorizationRequest
             .Builder(
-              serviceConfiguration,
+              getCriiptoOIDCConfiguration(),
               clientID,
               ResponseTypeValues.CODE,
               redirectUri,
@@ -412,7 +394,7 @@ class CriiptoVerify private constructor(
       val decodedJWT = JWT.decode(idToken)
 
       val keyId = decodedJWT.getHeaderClaim("kid").asString()
-      val key = jwks?.find { it.id == keyId }
+      val key = getCriiptoJWKS().find { it.id == keyId }
 
       if (key == null) {
         throw Exception("Unknown key $keyId")
@@ -449,8 +431,9 @@ class CriiptoVerify private constructor(
   suspend fun logout(idToken: String?) {
     val endSessionRequest =
       EndSessionRequest
-        .Builder(serviceConfiguration)
-        .setIdTokenHint(idToken)
+        .Builder(
+          getCriiptoOIDCConfiguration(),
+        ).setIdTokenHint(idToken)
         .setPostLogoutRedirectUri(redirectUri)
         .build()
 
@@ -474,7 +457,8 @@ class CriiptoVerify private constructor(
   private suspend fun pushAuthorizationRequest(authorizationRequest: AuthorizationRequest): Uri {
     val response =
       httpClient.submitForm(
-        serviceConfiguration.discoveryDoc!!
+        getCriiptoOIDCConfiguration()
+          .discoveryDoc!!
           .docJson
           .get(
             "pushed_authorization_request_endpoint",
@@ -515,7 +499,8 @@ class CriiptoVerify private constructor(
     )
     val parsedResponse = response.body<ParResponse>()
 
-    return serviceConfiguration.authorizationEndpoint
+    return getCriiptoOIDCConfiguration()
+      .authorizationEndpoint
       .buildUpon()
       .appendQueryParameter("client_id", clientID)
       .appendQueryParameter(
@@ -560,25 +545,43 @@ class CriiptoVerify private constructor(
         }
       }
 
-  private suspend fun fetchCriiptoJWKS() =
+  private suspend fun loadCriiptoJWKS() =
     withContext(Dispatchers.IO) {
-      jwks = UrlJwkProvider(domain.toString()).getAll()
+      UrlJwkProvider(
+        domain.toString(),
+      ).all
     }
 
-  private suspend fun fetchCriiptoOIDCConfiguration() =
+  private suspend fun loadCriiptoOIDCConfiguration(): AuthorizationServiceConfiguration =
     suspendCoroutine { continuation ->
       AuthorizationServiceConfiguration.fetchFromIssuer(
         domain,
-      ) { _serviceConfiguration, ex ->
+      ) { serviceConfiguration, ex ->
         if (ex != null) {
           Log.e(TAG, "Failed to fetch OIDC configuration", ex)
           continuation.resumeWithException(ex)
-        }
-        if (_serviceConfiguration != null) {
+        } else {
           Log.d(TAG, "Fetched OIDC configuration")
-          serviceConfiguration = _serviceConfiguration
-          continuation.resume(Unit)
+          continuation.resume(serviceConfiguration!!)
         }
       }
     }
+}
+
+internal fun <T> cacheResult(
+  scope: CoroutineScope,
+  load: suspend () -> T,
+): suspend () -> T {
+  var cachedDeferred: Deferred<T>? = null
+  return {
+    // If there is currently no cached deferred, or if the current cached deferred has failed, create a new one
+    if (cachedDeferred == null || cachedDeferred?.isCancelled == true) {
+      cachedDeferred =
+        scope.async {
+          load()
+        }
+    }
+
+    cachedDeferred.await()
+  }
 }

@@ -40,18 +40,12 @@ class LoginViewModel(
 
   init {
     if (activity != null) {
-      viewModelScope.launch {
-        try {
-          criiptoVerify =
-            CriiptoVerify.create(
-              BuildConfig.CRIIPTO_CLIENT_ID,
-              "https://${BuildConfig.CRIIPTO_DOMAIN}".toUri(),
-              activity = activity,
-            )
-        } catch (exception: Exception) {
-          println("Error while initializing Criipto Verify ${exception.localizedMessage}")
-        }
-      }
+      criiptoVerify =
+        CriiptoVerify(
+          BuildConfig.CRIIPTO_CLIENT_ID,
+          "https://${BuildConfig.CRIIPTO_DOMAIN}".toUri(),
+          activity = activity,
+        )
     }
   }
 

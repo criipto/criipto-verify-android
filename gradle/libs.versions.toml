@@ -20,6 +20,7 @@ ktor = "3.3.1"
 kotlixSerialization = "1.9.0"
 javaUuidGenerator = "5.1.1"
 opentelemetryBom = "1.55.0"
+kotlinxCoroutinesTest = "1.10.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -56,6 +57,8 @@ opentelemetry-bom = { module = "io.opentelemetry:opentelemetry-bom", version.ref
 opentelemetry-api = { module = "io.opentelemetry:opentelemetry-api" }
 opentelemetry-extension-kotlin = { module = "io.opentelemetry:opentelemetry-extension-kotlin" }
 opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk" }
+
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest"}
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
