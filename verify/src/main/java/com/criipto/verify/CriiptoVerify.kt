@@ -1,6 +1,5 @@
 package com.criipto.verify
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
@@ -17,7 +16,6 @@ import com.auth0.jwk.Jwk
 import com.auth0.jwk.UrlJwkProvider
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
-import com.auth0.jwt.exceptions.JWTVerificationException
 import com.criipto.verify.eid.DanishMitID
 import com.criipto.verify.eid.EID
 import io.ktor.client.HttpClient
@@ -31,6 +29,7 @@ import io.ktor.http.content.OutgoingContent
 import io.ktor.http.formUrlEncode
 import io.ktor.http.parametersOf
 import io.ktor.serialization.kotlinx.json.json
+import io.opentelemetry.api.trace.Span
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -58,6 +57,8 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 import kotlin.time.Duration.Companion.minutes
+import android.content.Context as AndroidContext
+import io.opentelemetry.context.Context as OtelContext
 
 const val TAG = "CriiptoVerify"
 
@@ -88,7 +89,6 @@ class CriiptoVerify private constructor(
 ) : DefaultLifecycleObserver {
   private val httpClient =
     HttpClient(Android) {
-      expectSuccess = true
       install(ContentNegotiation) {
         json()
       }
@@ -129,6 +129,12 @@ class CriiptoVerify private constructor(
   private var customTabIntentLauncher:
     ActivityResultLauncher<Pair<AuthorizationManagementRequest, Uri>>
 
+  private val tracing = Tracing(domain.host!!, httpClient)
+  private val tracer =
+    tracing.getTracer(BuildConfig.LIBRARY_PACKAGE_NAME, BuildConfig.VERSION)
+
+  private lateinit var browserDescription: String
+
   companion object {
     suspend fun create(
       clientID: String,
@@ -165,7 +171,7 @@ class CriiptoVerify private constructor(
         object :
           ActivityResultContract<Pair<AuthorizationManagementRequest, Uri>, CustomTabResult>() {
           override fun createIntent(
-            context: Context,
+            context: AndroidContext,
             input: Pair<AuthorizationManagementRequest, Uri>,
           ): Intent {
             Log.d(TAG, "Creating custom tab intent")
@@ -227,47 +233,56 @@ class CriiptoVerify private constructor(
         TabType.CustomTab
       }
 
-    val enabledBrowsers =
-      listOf(
-        Browsers.Chrome.PACKAGE_NAME,
-        Browsers.SBrowser.PACKAGE_NAME,
-        BRAVE,
-        EDGE,
-      ).associateWith {
-        (
-          CustomTabsClient.getPackageName(
-            activity,
-            listOf(it),
-            true,
-          ) != null
-        )
-      }
-
-    val browserMatcher: BrowserMatcher =
+    val browserMatcher =
       when (tabType) {
         // When using an auth tab, we do not need the internal browser matching logic from appauth
         TabType.AuthTab -> {
           Log.i(TAG, "Using Chrome with auth tab")
+          browserDescription =
+            "${Browsers.Chrome.PACKAGE_NAME} ${activity.packageManager.getPackageInfo(
+              Browsers.Chrome.PACKAGE_NAME,
+              0,
+            ).versionName}, Auth tab"
           BrowserMatcher { false }
         }
-        TabType.CustomTab ->
-          if (enabledBrowsers[Browsers.Chrome.PACKAGE_NAME] == true) {
-            Log.i(TAG, "Using Chrome with custom tab")
-            VersionedBrowserMatcher.CHROME_CUSTOM_TAB
-          } else if (enabledBrowsers[Browsers.SBrowser.PACKAGE_NAME] == true) {
-            Log.i(TAG, "Using Samsung browser with custom tab")
-            VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB
-          } else if (enabledBrowsers[BRAVE] == true) {
-            Log.i(TAG, "Using Brave with custom tab")
-            BrowserMatcher { descriptor -> descriptor.packageName === BRAVE }
-          } else if (enabledBrowsers[EDGE] == true) {
-            Log.i(TAG, "Using Edge with custom tab")
-            BrowserMatcher { descriptor -> descriptor.packageName === EDGE }
-          } else {
-            Log.i(TAG, "Falling back to any browser")
-            // Fallback to any browser. TODO: maybe disable via flag?
-            AnyBrowserMatcher.INSTANCE
-          }
+        TabType.CustomTab -> {
+          val preferredBrowser =
+            listOf(
+              Pair(Browsers.Chrome.PACKAGE_NAME, VersionedBrowserMatcher.CHROME_CUSTOM_TAB),
+              Pair(Browsers.SBrowser.PACKAGE_NAME, VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB),
+              Pair(BRAVE, BrowserMatcher { it.packageName === BRAVE }),
+              Pair(EDGE, BrowserMatcher { it.packageName === EDGE }),
+            ).find {
+              // Find the first of our preferred browsers, which is able to open a custom tab.
+              CustomTabsClient.getPackageName(
+                activity,
+                listOf(it.first),
+                true,
+              ) != null
+            }
+
+          val (browserName, browserMatcher) =
+            // If we found any of our preferred browsers above, use that.
+            preferredBrowser
+              // Otherwise, fall back to the default browser
+              ?: Pair(
+                CustomTabsClient.getPackageName(
+                  activity,
+                  emptyList(),
+                )!!,
+                AnyBrowserMatcher.INSTANCE,
+              )
+
+          // TODO: error if there are no browsers that can handle custom tabs!
+
+          browserDescription =
+            "$browserName ${activity.packageManager.getPackageInfo(
+              browserName,
+              0,
+            ).versionName}, Custom tab"
+          Log.i(TAG, "Using $browserName with custom tab")
+          browserMatcher
+        }
       }
 
     authorizationService =
@@ -283,6 +298,7 @@ class CriiptoVerify private constructor(
 
   override fun onDestroy(owner: LifecycleOwner) {
     authorizationService.dispose()
+    tracing.close()
     httpClient.close()
   }
 
@@ -317,97 +333,104 @@ class CriiptoVerify private constructor(
     }
   }
 
-  suspend fun login(eid: EID<*>): String {
-    Log.i(TAG, "Starting login with ${eid.acrValue}")
+  suspend fun login(eid: EID<*>): String =
+    tracer
+      .spanBuilder(
+        "android sdk login",
+      ).setAttribute("acr_value", eid.acrValue)
+      .startAndRunSuspend {
+        println("Login ${Span.current().spanContext}")
+        Log.i(TAG, "Starting login with ${eid.acrValue}")
 
-    val loginHints =
-      (
-        mutableSetOf(
-          "mobile:continue_button:never",
-        ) + eid.loginHints
-      ) as MutableSet<String>
+        val loginHints =
+          (
+            mutableSetOf(
+              "mobile:continue_button:never",
+            ) + eid.loginHints
+          ) as MutableSet<String>
 
-    if (eid is DanishMitID) {
-      loginHints.add("appswitch:android")
-      loginHints.add("appswitch:resumeUrl:$appSwitchUri")
-    }
+        if (eid is DanishMitID) {
+          loginHints.add("appswitch:android")
+          loginHints.add("appswitch:resumeUrl:$appSwitchUri")
+        }
 
-    val scopes = eid.scopes + listOf("openid")
+        val scopes = eid.scopes + listOf("openid")
 
-    val authorizationRequest =
-      AuthorizationRequest
-        .Builder(
-          serviceConfiguration,
-          clientID,
-          ResponseTypeValues.CODE,
-          redirectUri,
-        ).setScope(scopes.joinToString(" "))
-        .setPrompt("login")
-        .setAdditionalParameters(mapOf("acr_values" to eid.acrValue))
-        .setLoginHint(loginHints.joinToString(" "))
-        .build()
+        val authorizationRequest =
+          AuthorizationRequest
+            .Builder(
+              serviceConfiguration,
+              clientID,
+              ResponseTypeValues.CODE,
+              redirectUri,
+            ).setScope(scopes.joinToString(" "))
+            .setPrompt("login")
+            .setAdditionalParameters(mapOf("acr_values" to eid.acrValue))
+            .setLoginHint(loginHints.joinToString(" "))
+            .build()
 
-    val parRequestUri = pushAuthorizationRequest(authorizationRequest)
+        val parRequestUri = pushAuthorizationRequest(authorizationRequest)
 
-    val callbackUri = launchBrowser(authorizationRequest, parRequestUri)
+        val callbackUri = launchBrowser(authorizationRequest, parRequestUri)
 
-    return exchangeCode(authorizationRequest, callbackUri)
-  }
+        exchangeCode(authorizationRequest, callbackUri)
+      }
 
   private suspend fun exchangeCode(
     request: AuthorizationRequest,
     callbackUri: Uri,
-  ): String =
-    suspendCoroutine { continuation ->
-      val response =
-        AuthorizationResponse
-          .Builder(request)
-          .fromUri(callbackUri)
+  ): String {
+    val tokenResponse =
+      tracer.spanBuilder("code exchange").startAndRunSuspend {
+        val response =
+          AuthorizationResponse
+            .Builder(request)
+            .fromUri(callbackUri)
+            .build()
+
+        if (!validateState(request, response)) {
+          throw Exception("State mismatch")
+        }
+
+        suspendCoroutine { continuation ->
+          authorizationService.performTokenRequest(
+            response.createTokenExchangeRequest(),
+          ) { tokenResponse, ex ->
+            if (ex != null) {
+              continuation.resumeWithException(ex)
+            } else {
+              // From TokenResponseCallback - Exactly one of `response` or `ex` will be non-null. So
+              // when we reach this line, we know that response is not null.
+              continuation.resume(tokenResponse!!)
+            }
+          }
+        }
+      }
+
+    return tracer.spanBuilder("JWT verification").startAndRun {
+      val idToken = tokenResponse.idToken!!
+      val decodedJWT = JWT.decode(idToken)
+
+      val keyId = decodedJWT.getHeaderClaim("kid").asString()
+      val key = jwks?.find { it.id == keyId }
+
+      if (key == null) {
+        throw Exception("Unknown key $keyId")
+      }
+
+      val algorithm = Algorithm.RSA256(key.publicKey as RSAPublicKey)
+      val verifier =
+        JWT
+          .require(algorithm)
+          .withIssuer(domain.toString())
+          // Add five minutes of leeway when validating nbf and iat.
+          .acceptLeeway(5.minutes.inWholeSeconds)
           .build()
 
-      if (!validateState(request, response)) {
-        continuation.resumeWithException(Exception("State mismatch"))
-        return@suspendCoroutine
-      }
-
-      authorizationService.performTokenRequest(
-        response.createTokenExchangeRequest(),
-      ) { tokenResponse, ex ->
-        if (ex != null) {
-          continuation.resumeWithException(ex)
-          return@performTokenRequest
-        }
-
-        // From TokenResponseCallback - Exactly one of `response` or `ex` will be non-null. So
-        // when we reach this line, we know that response is not null.
-        val idToken = tokenResponse!!.idToken!!
-        val decodedJWT = JWT.decode(idToken)
-
-        val keyId = decodedJWT.getHeaderClaim("kid").asString()
-        val key = jwks?.find { it.id == keyId }
-
-        if (key == null) {
-          continuation.resumeWithException(Exception("Unknown key $keyId"))
-          return@performTokenRequest
-        }
-
-        try {
-          val algorithm = Algorithm.RSA256(key.publicKey as RSAPublicKey)
-          val verifier =
-            JWT
-              .require(algorithm)
-              .withIssuer(domain.toString())
-              // Add five minutes of leeway when validating nbf and iat.
-              .acceptLeeway(5.minutes.inWholeSeconds)
-              .build()
-
-          verifier.verify(idToken)
-          continuation.resume(idToken)
-        } catch (exception: JWTVerificationException) {
-          continuation.resumeWithException(exception)
-        }
-      }
+      verifier.verify(idToken)
+      return@startAndRun idToken
     }
+  }
 
   private fun validateState(
     request: AuthorizationManagementRequest,
@@ -448,49 +471,58 @@ class CriiptoVerify private constructor(
   /**
    * Starts the PAR flow, as described in https://datatracker.ietf.org/doc/html/rfc9126
    */
-  private suspend fun pushAuthorizationRequest(authorizationRequest: AuthorizationRequest): Uri =
-    withContext(
-      Dispatchers.IO,
-    ) {
-      val response =
-        httpClient.submitForm(
-          serviceConfiguration.discoveryDoc!!
-            .docJson
-            .get(
-              "pushed_authorization_request_endpoint",
-            ).toString(),
-        ) {
-          // The FormDataContent class appends ; charset=UTF-8 to the content-type, which Verify does not like. So we create our own type
-          setBody(
-            object : OutgoingContent.ByteArrayContent() {
-              override val contentType =
-                ContentType.Application.FormUrlEncoded.withoutParameters()
+  private suspend fun pushAuthorizationRequest(authorizationRequest: AuthorizationRequest): Uri {
+    val response =
+      httpClient.submitForm(
+        serviceConfiguration.discoveryDoc!!
+          .docJson
+          .get(
+            "pushed_authorization_request_endpoint",
+          ).toString(),
+      ) {
+        tracing.propagators().textMapPropagator.inject(
+          OtelContext.current(),
+          this,
+          KtorRequestSetter,
+        )
 
-              override fun bytes() =
-                parametersOf(
-                  authorizationRequest.toUri().queryParameterNames.associateWith {
-                    listOf(authorizationRequest.toUri().getQueryParameter(it)!!)
-                  },
-                ).formUrlEncode().toByteArray()
-            },
-          )
-        }
+        // The FormDataContent class appends ; charset=UTF-8 to the content-type, which Verify does not like. So we create our own type
+        setBody(
+          object : OutgoingContent.ByteArrayContent() {
+            override val contentType =
+              ContentType.Application.FormUrlEncoded.withoutParameters()
 
-      @Serializable()
-      data class ParResponse(
-        val request_uri: String,
-        val expires_in: Int,
+            override fun bytes() =
+              parametersOf(
+                authorizationRequest.toUri().queryParameterNames.associateWith {
+                  listOf(authorizationRequest.toUri().getQueryParameter(it)!!)
+                },
+              ).formUrlEncode().toByteArray()
+          },
+        )
+      }
+
+    if (response.status.value != 201) {
+      throw Error(
+        "Error during PAR request ${response.status.value} ${response.status.description}",
       )
-      val parsedResponse = response.body<ParResponse>()
-
-      serviceConfiguration.authorizationEndpoint
-        .buildUpon()
-        .appendQueryParameter("client_id", clientID)
-        .appendQueryParameter(
-          "request_uri",
-          parsedResponse.request_uri,
-        ).build()
     }
+
+    @Serializable()
+    data class ParResponse(
+      val request_uri: String,
+      val expires_in: Int,
+    )
+    val parsedResponse = response.body<ParResponse>()
+
+    return serviceConfiguration.authorizationEndpoint
+      .buildUpon()
+      .appendQueryParameter("client_id", clientID)
+      .appendQueryParameter(
+        "request_uri",
+        parsedResponse.request_uri,
+      ).build()
+  }
 
   /**
    * The continuation that should be invoked when control returns from the browser to this library.
@@ -500,27 +532,33 @@ class CriiptoVerify private constructor(
   private suspend fun launchBrowser(
     request: AuthorizationManagementRequest,
     uri: Uri = request.toUri(),
-  ) = suspendCoroutine { continuation ->
-    browserFlowContinuation = continuation
+  ): Uri =
+    tracer
+      .spanBuilder("launch browser")
+      .setAttribute("browser", browserDescription)
+      .startAndRunSuspend {
+        suspendCoroutine { continuation ->
+          browserFlowContinuation = continuation
 
-    if (tabType == TabType.AuthTab) {
-      // Open the Authorization URI in an Auth Tab if supported by chrome
-      val authTabIntent = AuthTabIntent.Builder().build()
+          if (tabType == TabType.AuthTab) {
+            // Open the Authorization URI in an Auth Tab if supported by chrome
+            val authTabIntent = AuthTabIntent.Builder().build()
 
-      // Auth tab will use the default browser, but we force it to use chrome.
-      // In the future, other browser _could_ support the auth tab API (like they support custom tabs). But at the time of writing, only chrome supports it.
-      authTabIntent.intent.`package` = Browsers.Chrome.PACKAGE_NAME
-      authTabIntent.launch(
-        authTabIntentLauncher,
-        uri,
-        redirectUri.host!!,
-        redirectUri.path!!,
-      )
-    } else {
-      // Fall back to a Custom Tab.
-      customTabIntentLauncher.launch(Pair(request, uri))
-    }
-  }
+            // Auth tab will use the default browser, but we force it to use chrome.
+            // In the future, other browser _could_ support the auth tab API (like they support custom tabs). But at the time of writing, only chrome supports it.
+            authTabIntent.intent.`package` = Browsers.Chrome.PACKAGE_NAME
+            authTabIntent.launch(
+              authTabIntentLauncher,
+              uri,
+              redirectUri.host!!,
+              redirectUri.path!!,
+            )
+          } else {
+            // Fall back to a Custom Tab.
+            customTabIntentLauncher.launch(Pair(request, uri))
+          }
+        }
+      }
 
   private suspend fun fetchCriiptoJWKS() =
     withContext(Dispatchers.IO) {

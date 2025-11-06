@@ -5,6 +5,10 @@ plugins {
 }
 
 android {
+  buildFeatures {
+    buildConfig = true
+  }
+
   namespace = "com.criipto.verify"
   compileSdk {
     version = release(36)
@@ -15,6 +19,9 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     consumerProguardFiles("consumer-rules.pro")
+    val version = "0.0.1"
+    buildConfigField("String", "VERSION", "\"$version\"")
+    setVersion(version)
   }
 
   buildTypes {
@@ -49,6 +56,13 @@ dependencies {
   implementation(libs.ktor.client.content.negotiation)
   implementation(libs.kotlinx.serialization)
   implementation(libs.ktor.serialization.kotlinx.json)
+
+  implementation(platform(libs.opentelemetry.bom))
+  implementation(libs.opentelemetry.api)
+  implementation(libs.opentelemetry.sdk)
+  implementation(libs.opentelemetry.extension.kotlin)
+
+  implementation(libs.java.uuid.generator)
 
   testImplementation(libs.junit)
   androidTestImplementation(libs.androidx.junit)
