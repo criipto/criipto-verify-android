@@ -57,6 +57,7 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
+import kotlin.time.Duration.Companion.minutes
 
 const val TAG = "CriiptoVerify"
 
@@ -396,9 +397,8 @@ class CriiptoVerify private constructor(
             JWT
               .require(algorithm)
               .withIssuer(domain.toString())
-              // Do not throw on JWTs with iat "in the future". This can easily happen due to clock skew, see https://github.com/auth0/java-jwt/issues/467
-              .ignoreIssuedAt()
-              .acceptNotBefore(5) // Add five seconds of leeway when validating nbf.
+              // Add five minutes of leeway when validating nbf and iat.
+              .acceptLeeway(5.minutes.inWholeSeconds)
               .build()
 
           verifier.verify(idToken)
