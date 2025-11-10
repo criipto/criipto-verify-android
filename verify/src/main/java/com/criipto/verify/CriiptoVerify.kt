@@ -340,28 +340,43 @@ class CriiptoVerify(
     }
   }
 
-  suspend fun login(eid: EID<*>): String =
+  suspend fun login(eid: EID<*>): String = login(listOf(eid))
+
+  suspend fun login(
+    eids: List<EID<*>?> = emptyList(),
+    scopes: Set<String> = emptySet(),
+    loginHints: Set<String> = emptySet(),
+  ): String =
     tracer
       .spanBuilder(
         "android sdk login",
-      ).setAttribute("acr_value", eid.acrValue)
-      .startAndRunSuspend {
+      ).startAndRunSuspend {
+        val eids = eids.filterNotNull()
+        Span.current().setAttribute("acr_values", eids.joinToString(",") { it.acrValue })
         println("Login ${Span.current().spanContext}")
-        Log.i(TAG, "Starting login with ${eid.acrValue}")
 
-        val loginHints =
+        Log.i(
+          TAG,
+          "Starting login with ${if (eids.isNotEmpty()) {
+            eids.map { it.acrValue }
+          } else {
+            "no acr_values"
+          }}",
+        )
+
+        val allLoginHints =
           (
             mutableSetOf(
               "mobile:continue_button:never",
-            ) + eid.loginHints
+            ) + eids.flatMap { it.loginHints } + loginHints
           ) as MutableSet<String>
 
-        if (eid is DanishMitID && appSwitchUri != null) {
-          loginHints.add("appswitch:android")
-          loginHints.add("appswitch:resumeUrl:$appSwitchUri")
+        if (eids.any { it is DanishMitID } && appSwitchUri != null) {
+          allLoginHints.add("appswitch:android")
+          allLoginHints.add("appswitch:resumeUrl:$appSwitchUri")
         }
 
-        val scopes = eid.scopes + listOf("openid")
+        val allScopes = scopes + eids.flatMap { it.scopes } + listOf("openid")
 
         val authorizationRequest =
           AuthorizationRequest
@@ -370,10 +385,10 @@ class CriiptoVerify(
               clientID,
               ResponseTypeValues.CODE,
               redirectUri,
-            ).setScope(scopes.joinToString(" "))
+            ).setScope(allScopes.joinToString(" "))
             .setPrompt("login")
-            .setAdditionalParameters(mapOf("acr_values" to eid.acrValue))
-            .setLoginHint(loginHints.joinToString(" "))
+            .setAdditionalParameters(mapOf("acr_values" to eids.joinToString(" ") { it.acrValue }))
+            .setLoginHint(allLoginHints.joinToString(" "))
             .build()
 
         val parRequestUri = pushAuthorizationRequest(authorizationRequest)

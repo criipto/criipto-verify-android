@@ -59,14 +59,10 @@ fun MainScreen(loginViewModel: LoginViewModel) {
 
   return when (loginState) {
     is LoginState.LoggedIn ->
-      LoggedInScreen(loginState as LoginState.LoggedIn) {
-        loginViewModel.logout()
-      }
+      LoggedInScreen(loginState as LoginState.LoggedIn, loginViewModel::logout)
 
     is LoginState.NotLoggedIn ->
-      LoginScreen(loginState as LoginState.NotLoggedIn) { eid ->
-        loginViewModel.login(eid)
-      }
+      LoginScreen(loginState as LoginState.NotLoggedIn, loginViewModel::login)
 
     is LoginState.Loading -> LoadingScreen()
   }
@@ -187,7 +183,7 @@ class LoginStateViewModelNotLoggedInProvider : PreviewParameterProvider<LoginSta
 fun LoginScreen(
   @PreviewParameter(LoginStateViewModelNotLoggedInProvider::class) loginState:
     LoginState.NotLoggedIn,
-  onLogin: ((EID<*>) -> Unit)? = null,
+  onLogin: ((List<EID<*>>) -> Unit)? = null,
 ) {
   Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
     Box(
@@ -222,31 +218,44 @@ fun LoginScreen(
             val name: String,
           )
           Button(onClick = {
-            onLogin?.invoke(Mock().withMockData(MockData(name = "foobar")))
+            onLogin?.invoke(listOf(Mock().withMockData(MockData(name = "foobar"))))
           }, modifier = buttonModifier) {
             Text(text = "Login with Mock")
           }
 
           Button(onClick = {
             onLogin?.invoke(
-              DanishMitID
-                .substantial()
-                .withMessage("hello!"),
+              listOf(
+                DanishMitID
+                  .substantial()
+                  .withMessage("hello!"),
+              ),
             )
           }, modifier = buttonModifier) {
             Text(text = "Login with MitID")
           }
 
           Button(onClick = {
-            onLogin?.invoke(SwedishBankID.sameDevice().withMessage("hello!"))
+            onLogin?.invoke(
+              listOf(
+                SwedishBankID.sameDevice().withMessage("hello!"),
+                NorwegianBankID.substantial(),
+              ),
+            )
           }, modifier = buttonModifier) {
-            Text(text = "Login with SE BankID")
+            Text(text = "Login with SE or NO BankID")
           }
 
           Button(onClick = {
-            onLogin?.invoke(NorwegianBankID.substantial())
+            onLogin?.invoke(listOf(NorwegianBankID.substantial()))
           }, modifier = buttonModifier) {
             Text(text = "Login with NO BankID")
+          }
+
+          Button(onClick = {
+            onLogin?.invoke(emptyList())
+          }, modifier = buttonModifier) {
+            Text(text = "Login with anything")
           }
         }
       }

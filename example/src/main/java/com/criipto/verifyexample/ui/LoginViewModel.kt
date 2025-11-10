@@ -49,11 +49,11 @@ class LoginViewModel(
     }
   }
 
-  fun login(eid: EID<*>) =
+  fun login(eids: List<EID<*>>) =
     viewModelScope.launch {
       _uiState.update { LoginState.Loading() }
       try {
-        val idToken = criiptoVerify.login(eid)
+        val idToken = criiptoVerify.login(eids)
         val jwt = JWT(idToken)
         val nameClaim = jwt.getClaim("name")
 
