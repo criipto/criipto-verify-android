@@ -82,6 +82,23 @@ sealed class CustomTabResult {
   ) : CustomTabResult()
 }
 
+enum class Prompt(
+  internal val str: String,
+) {
+  Login("login"),
+  None("none"),
+  Consent("consent"),
+  ConsentRevoke("consent_revoke"),
+}
+
+enum class Action {
+  Login,
+  Confirm,
+  Accept,
+  Approve,
+  Sign,
+}
+
 class CriiptoVerify(
   private val clientID: String,
   private val domain: Uri,
@@ -347,7 +364,10 @@ class CriiptoVerify(
    *
    * @sample com.criipto.verify.samples.loginSample1
    */
-  suspend fun login(eid: EID<*>): String =
+  suspend fun login(
+    eid: EID<*>,
+    prompt: Prompt? = null,
+  ): String =
     tracer
       .spanBuilder(
         "android sdk login",
@@ -370,6 +390,10 @@ class CriiptoVerify(
 
         val scopes = eid.scopes + listOf("openid")
 
+        if (eid.action != null) {
+          loginHints.add("action:${eid.action!!.name.lowercase()}")
+        }
+
         val authorizationRequest =
           AuthorizationRequest
             .Builder(
@@ -378,9 +402,9 @@ class CriiptoVerify(
               ResponseTypeValues.CODE,
               redirectUri,
             ).setScope(scopes.joinToString(" "))
-            .setPrompt("login")
             .setAdditionalParameters(mapOf("acr_values" to eid.acrValue))
             .setLoginHint(loginHints.joinToString(" "))
+            .setPrompt(prompt?.str)
             .build()
 
         val parRequestUri = pushAuthorizationRequest(authorizationRequest)
