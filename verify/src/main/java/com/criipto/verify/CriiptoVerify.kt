@@ -86,7 +86,7 @@ class CriiptoVerify(
   private val clientID: String,
   private val domain: Uri,
   private val redirectUri: Uri = "$domain/android/callback".toUri(),
-  private val appSwitchUri: Uri = "$domain/android/callback/appswitch".toUri(),
+  private val appSwitchUri: Uri? = "$domain/android/callback/appswitch".toUri(),
   private val activity: ComponentActivity,
 ) : DefaultLifecycleObserver {
   private val httpClient =
@@ -132,7 +132,7 @@ class CriiptoVerify(
 
   init {
     for (uri in listOf(domain, redirectUri, appSwitchUri)) {
-      if (uri.scheme != "https") {
+      if (uri != null && uri.scheme != "https") {
         throw Exception("domain, redirectUri and appSwitchUri must be HTTPS URIs")
       }
     }
@@ -331,7 +331,7 @@ class CriiptoVerify(
             ) + eid.loginHints
           ) as MutableSet<String>
 
-        if (eid is DanishMitID) {
+        if (eid is DanishMitID && appSwitchUri != null) {
           loginHints.add("appswitch:android")
           loginHints.add("appswitch:resumeUrl:$appSwitchUri")
         }
