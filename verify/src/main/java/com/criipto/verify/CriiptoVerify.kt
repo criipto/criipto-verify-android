@@ -340,8 +340,24 @@ class CriiptoVerify(
     }
   }
 
+  /**
+   * Start a login, returning the JWT as a string once the flow is complete.
+   *
+   * The SDK provides builder classes for some of the eIDs supported by Criipto Verify. You should use these when possible, since they provide helper methods for the scopes and login hints supported by the specific eID provider. For example, Danish MitID supports SSN prefilling, which you can access using the `prefillSsn` method.
+   *
+   * @sample com.criipto.verify.samples.loginSample1
+   */
   suspend fun login(eid: EID<*>): String = login(listOf(eid))
 
+  /**
+   * Start a login, returning the JWT as a string once the flow is complete.
+   *
+   * The SDK provides builder classes for some of the eIDs supported by Criipto Verify. You should use these when possible, since they provide helper methods for the scopes and login hints supported by the specific eID provider. For example, Danish MitID supports SSN prefilling, which you can access using the `prefillSsn` method.
+   *
+   * The user will be presented with a dialog, allowing them to select between the specified eIDs, or all eIDs enabled on the application, if the list is empty.
+   *
+   * @sample com.criipto.verify.samples.loginSample2
+   */
   suspend fun login(
     eids: List<EID<*>?> = emptyList(),
     scopes: Set<String> = emptySet(),
