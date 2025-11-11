@@ -240,9 +240,7 @@ class IduraVerify(
         TabType.CustomTab
       }
 
-    if (tabType == TabType.CustomTab) {
-      verifyAppLink(redirectUri)
-    }
+    verifyAppLink(redirectUri)
     if (appSwitchUri != null) {
       verifyAppLink(appSwitchUri)
     }
