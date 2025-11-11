@@ -362,6 +362,11 @@ class CriiptoVerify(
    *
    * The SDK provides builder classes for some of the eIDs supported by Criipto Verify. You should use these when possible, since they provide helper methods for the scopes and login hints supported by the specific eID provider. For example, Danish MitID supports SSN prefilling, which you can access using the `prefillSsn` method.
    *
+   * @param eid The eID to login with.
+   * @param prompt The OIDC prompt, see https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
+   *
+   * @return The JWT as a string.
+   *
    * @sample com.criipto.verify.samples.loginSample1
    */
   suspend fun login(
