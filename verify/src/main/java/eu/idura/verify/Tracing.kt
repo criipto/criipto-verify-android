@@ -38,7 +38,7 @@ import kotlinx.serialization.Serializable
 import java.util.UUID
 
 @Serializable
-data class IduraSpan(
+private data class IduraSpan(
   val context: Map<String, String>,
   val attributes: Map<String, String>,
   val name: String,

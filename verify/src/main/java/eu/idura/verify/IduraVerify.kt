@@ -62,7 +62,7 @@ import kotlin.time.Duration.Companion.minutes
 import android.content.Context as AndroidContext
 import io.opentelemetry.context.Context as OtelContext
 
-const val TAG = "IduraVerify"
+internal const val TAG = "IduraVerify"
 
 private const val BRAVE = "com.brave.browser"
 private const val EDGE = "com.microsoft.emmx"
@@ -72,7 +72,7 @@ private enum class TabType {
   AuthTab(),
 }
 
-sealed class CustomTabResult {
+private sealed class CustomTabResult {
   class CustomTabSuccess(
     val resultUri: Uri,
   ) : CustomTabResult()
