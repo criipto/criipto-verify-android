@@ -22,12 +22,14 @@
                 <data android:path="/android/callback/appswitch" />
             </intent-filter>
         </activity>
-
+        <!-- We re-export the RedirectUriReceiverActivity class from appauth, so SDK consumers can override intent filters. So we remove the intent filters added by appauth. -->
         <activity
             android:name="net.openid.appauth.RedirectUriReceiverActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            tools:node="replace">
+            tools:node="remove"
+        />
+        <activity
+            android:name="eu.idura.verify.RedirectUriReceiverActivity"
+            android:exported="true">
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
 
