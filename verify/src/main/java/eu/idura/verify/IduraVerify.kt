@@ -378,8 +378,10 @@ class IduraVerify(
         "android sdk login",
       ).setAttribute("acr_value", eid.acrValue)
       .startAndRunSuspend {
-        println("Login ${Span.current().spanContext}")
-        Log.i(TAG, "Starting login with ${eid.acrValue}")
+        Log.i(
+          TAG,
+          "Starting login with ${eid.acrValue}, traceId ${Span.current().spanContext.traceId}",
+        )
 
         val loginHints =
           (
