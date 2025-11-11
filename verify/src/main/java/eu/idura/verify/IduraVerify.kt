@@ -11,6 +11,7 @@ import androidx.browser.auth.AuthTabIntent.AuthResult
 import androidx.browser.customtabs.CustomTabsClient
 import androidx.core.net.toUri
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.auth0.jwk.UrlJwkProvider
@@ -152,6 +153,13 @@ class IduraVerify(
       if (uri != null && uri.scheme != "https") {
         throw Exception("domain, redirectUri and appSwitchUri must be HTTPS URIs")
       }
+    }
+
+    if (activity.lifecycle.currentState != Lifecycle.State.INITIALIZED) {
+      // We cannot register activity result handlers once the activity has been created, so better to fail early and explicitly
+      throw IllegalStateException(
+        "Activity must be in ${Lifecycle.State.INITIALIZED.name} state, was ${activity.lifecycle.currentState.name}",
+      )
     }
 
     activity.lifecycle.addObserver(this)
