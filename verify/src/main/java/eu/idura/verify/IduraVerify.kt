@@ -383,7 +383,7 @@ class IduraVerify(
       .spanBuilder(
         "android sdk login",
       ).setAttribute("acr_value", eid.acrValue)
-      .startAndRunSuspend {
+      .startAndRun {
         Log.i(
           TAG,
           "Starting login with ${eid.acrValue}, traceId ${Span.current().spanContext.traceId}",
@@ -432,7 +432,7 @@ class IduraVerify(
     callbackUri: Uri,
   ): String {
     val tokenResponse =
-      tracer.spanBuilder("code exchange").startAndRunSuspend {
+      tracer.spanBuilder("code exchange").startAndRun {
         val response =
           AuthorizationResponse
             .Builder(request)
@@ -590,7 +590,7 @@ class IduraVerify(
     tracer
       .spanBuilder("launch browser")
       .setAttribute("browser", browserDescription)
-      .startAndRunSuspend {
+      .startAndRun {
         suspendCoroutine { continuation ->
           browserFlowContinuation = continuation
 

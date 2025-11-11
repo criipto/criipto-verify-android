@@ -262,32 +262,7 @@ internal object KtorRequestSetter : TextMapSetter<HttpRequestBuilder> {
  * 1. It sets status to OK when the block completes successfully
  * 2. It supports suspend functions
  */
-
-internal inline fun <T> SpanBuilder.startAndRun(block: () -> T): T {
-  val span = this.startSpan()
-
-  try {
-    val result =
-      span.makeCurrent().use {
-        block()
-      }
-
-    span.setStatus(StatusCode.OK)
-    return result
-  } catch (exception: Exception) {
-    span.setStatus(StatusCode.ERROR, exception.message ?: "")
-    span.recordException(exception)
-    throw exception
-  } finally {
-    span.end()
-  }
-}
-
-// kotlin 2.20 provides [Improved overload resolution for lambdas with suspend function types](https://kotlinlang.org/docs/whatsnew2220.html#improved-overload-resolution-for-lambdas-with-suspend-function-types)
-// However, it does not work for functions with generics. So we create two different functions, instead of overloading.
-internal suspend inline fun <T> SpanBuilder.startAndRunSuspend(
-  crossinline block: suspend () -> T,
-): T {
+internal suspend inline fun <T> SpanBuilder.startAndRun(crossinline block: suspend () -> T): T {
   val span = this.startSpan()
 
   try {
