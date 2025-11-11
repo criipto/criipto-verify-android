@@ -102,9 +102,9 @@ enum class Action {
 
 class IduraVerify(
   private val clientID: String,
-  private val domain: Uri,
-  private val redirectUri: Uri = "$domain/android/callback".toUri(),
-  private val appSwitchUri: Uri? = "$domain/android/callback/appswitch".toUri(),
+  private val domain: String,
+  private val redirectUri: Uri = "https://$domain/android/callback".toUri(),
+  private val appSwitchUri: Uri? = "https://$domain/android/callback/appswitch".toUri(),
   private val activity: ComponentActivity,
 ) : DefaultLifecycleObserver {
   private val httpClient =
@@ -139,7 +139,7 @@ class IduraVerify(
   private var customTabIntentLauncher:
     ActivityResultLauncher<Pair<AuthorizationManagementRequest, Uri>>
 
-  private val tracing = Tracing(domain.host!!, httpClient)
+  private val tracing = Tracing(domain, httpClient)
   private val tracer =
     tracing.getTracer(BuildConfig.LIBRARY_PACKAGE_NAME, BuildConfig.VERSION)
 
@@ -149,9 +149,9 @@ class IduraVerify(
     cacheResult(activity.lifecycleScope, this::loadIduraOIDCConfiguration)
 
   init {
-    for (uri in listOf(domain, redirectUri, appSwitchUri)) {
+    for (uri in listOf(redirectUri, appSwitchUri)) {
       if (uri != null && uri.scheme != "https") {
-        throw Exception("domain, redirectUri and appSwitchUri must be HTTPS URIs")
+        throw Exception("redirectUri and appSwitchUri must be HTTPS URIs")
       }
     }
 
@@ -473,7 +473,7 @@ class IduraVerify(
       val verifier =
         JWT
           .require(algorithm)
-          .withIssuer(domain.toString())
+          .withIssuer("https://$domain")
           // Add five minutes of leeway when validating nbf and iat.
           .acceptLeeway(5.minutes.inWholeSeconds)
           .build()
@@ -616,15 +616,13 @@ class IduraVerify(
 
   private suspend fun loadIduraJWKS() =
     withContext(Dispatchers.IO) {
-      UrlJwkProvider(
-        domain.toString(),
-      ).all
+      UrlJwkProvider(domain).all
     }
 
   private suspend fun loadIduraOIDCConfiguration(): AuthorizationServiceConfiguration =
     suspendCoroutine { continuation ->
       AuthorizationServiceConfiguration.fetchFromIssuer(
-        domain,
+        "https://$domain".toUri(),
       ) { serviceConfiguration, ex ->
         if (ex != null) {
           Log.e(TAG, "Failed to fetch OIDC configuration", ex)

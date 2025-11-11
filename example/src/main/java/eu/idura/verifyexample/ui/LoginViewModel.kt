@@ -43,7 +43,7 @@ class LoginViewModel(
       iduraVerify =
         IduraVerify(
           BuildConfig.IDURA_CLIENT_ID,
-          "https://${BuildConfig.IDURA_DOMAIN}".toUri(),
+          BuildConfig.IDURA_DOMAIN,
           activity = activity,
         )
     }
