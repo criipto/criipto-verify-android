@@ -1,11 +1,14 @@
 package com.criipto.verify.eid
 
+import com.criipto.verify.Action
+
 abstract class EID<T : EID<T>>(
   acrValue: String,
   internal val scopes: MutableSet<String> = mutableSetOf(),
   internal val loginHints: MutableSet<String> = mutableSetOf(),
 ) {
   private var acrValues = mutableListOf(acrValue)
+  internal var action: Action? = null
 
   protected fun withModifier(modifier: String): T {
     acrValues.add(modifier.lowercase())
@@ -22,6 +25,11 @@ abstract class EID<T : EID<T>>(
 
   fun withLoginHint(loginHint: String): T {
     this.loginHints.add(loginHint)
+    return getThis()
+  }
+
+  protected open fun withAction(action: Action): T {
+    this.action = action
     return getThis()
   }
 

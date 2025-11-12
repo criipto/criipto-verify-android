@@ -1,5 +1,6 @@
 package com.criipto.verify.eid
 
+import com.criipto.verify.Action
 import kotlin.io.encoding.Base64
 
 class SwedishBankID private constructor() :
@@ -18,4 +19,6 @@ class SwedishBankID private constructor() :
 
     fun withMessage(message: String) =
       withLoginHint("message:${Base64.Default.encode(message.toByteArray())}")
+
+    fun sign(message: String) = withMessage(message).withAction(Action.Sign)
   }

@@ -1,5 +1,6 @@
 package com.criipto.verify.eid
 
+import com.criipto.verify.Action
 import java.util.UUID
 import kotlin.io.encoding.Base64
 import kotlin.uuid.ExperimentalUuidApi
@@ -44,4 +45,6 @@ class DanishMitID private constructor() : EID<DanishMitID>(acrValue = "urn:grn:a
 
   fun withMessage(message: String) =
     withLoginHint("message:${Base64.Default.encode(message.toByteArray())}")
+
+  public override fun withAction(action: Action) = super.withAction(action)
 }
