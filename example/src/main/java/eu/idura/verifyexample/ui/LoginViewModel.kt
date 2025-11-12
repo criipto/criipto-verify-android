@@ -1,10 +1,8 @@
 package eu.idura.verifyexample.ui
 
 import androidx.activity.ComponentActivity
-import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.auth0.android.jwt.JWT
 import eu.idura.verify.IduraVerify
 import eu.idura.verify.eid.EID
 import eu.idura.verifyexample.BuildConfig
@@ -53,16 +51,14 @@ class LoginViewModel(
     viewModelScope.launch {
       _uiState.update { LoginState.Loading() }
       try {
-        val idToken = iduraVerify.login(eid)
-        val jwt = JWT(idToken)
-        val nameClaim = jwt.getClaim("name")
+        val jwt = iduraVerify.login(eid)
 
         _uiState.update {
           LoginState.LoggedIn(
-            idToken,
-            nameClaim.asString(),
-            jwt.getClaim("sub").asString()!!,
-            jwt.getClaim("identityscheme").asString()!!,
+            jwt.token,
+            jwt.getClaimAsString("name"),
+            jwt.subject,
+            jwt.identityScheme,
           )
         }
       } catch (ex: Exception) {

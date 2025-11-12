@@ -15,7 +15,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.auth0.jwk.UrlJwkProvider
-import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import eu.idura.verify.eid.DanishMitID
 import eu.idura.verify.eid.EID
@@ -61,6 +60,7 @@ import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 import kotlin.time.Duration.Companion.minutes
 import android.content.Context as AndroidContext
+import com.auth0.jwt.JWT as Auth0JWT
 import io.opentelemetry.context.Context as OtelContext
 
 internal const val TAG = "IduraVerify"
@@ -378,7 +378,7 @@ class IduraVerify(
   suspend fun login(
     eid: EID<*>,
     prompt: Prompt? = null,
-  ): String =
+  ): JWT =
     tracer
       .spanBuilder(
         "android sdk login",
@@ -430,7 +430,7 @@ class IduraVerify(
   private suspend fun exchangeCode(
     request: AuthorizationRequest,
     callbackUri: Uri,
-  ): String {
+  ): JWT {
     val tokenResponse =
       tracer.spanBuilder("code exchange").startAndRun {
         val response =
@@ -460,7 +460,7 @@ class IduraVerify(
 
     return tracer.spanBuilder("JWT verification").startAndRun {
       val idToken = tokenResponse.idToken!!
-      val decodedJWT = JWT.decode(idToken)
+      val decodedJWT = Auth0JWT.decode(idToken)
 
       val keyId = decodedJWT.getHeaderClaim("kid").asString()
       val key = getIduraJWKS().find { it.id == keyId }
@@ -471,7 +471,7 @@ class IduraVerify(
 
       val algorithm = Algorithm.RSA256(key.publicKey as RSAPublicKey)
       val verifier =
-        JWT
+        Auth0JWT
           .require(algorithm)
           .withIssuer("https://$domain")
           // Add five minutes of leeway when validating nbf and iat.
@@ -479,7 +479,7 @@ class IduraVerify(
           .build()
 
       verifier.verify(idToken)
-      return@startAndRun idToken
+      return@startAndRun JWT(decodedJWT)
     }
   }
 
