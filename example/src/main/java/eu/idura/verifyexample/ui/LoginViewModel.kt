@@ -72,9 +72,10 @@ class LoginViewModel(
 
   fun logout() =
     viewModelScope.launch {
+      val idToken = (_uiState.value as? LoginState.LoggedIn)?.idToken
       _uiState.update { LoginState.Loading() }
       try {
-        iduraVerify.logout((_uiState.value as? LoginState.LoggedIn)?.idToken)
+        iduraVerify.logout(idToken)
         _uiState.update { LoginState.NotLoggedIn() }
       } catch (ex: Exception) {
         _uiState.update { LoginState.NotLoggedIn(ex.localizedMessage) }
