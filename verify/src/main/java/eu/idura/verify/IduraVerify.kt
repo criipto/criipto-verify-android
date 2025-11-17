@@ -245,16 +245,32 @@ class IduraVerify(
       verifyAppLink(appSwitchUri)
     }
 
+    val browserMatcher = findSuitableBrowser()
+
+    authorizationService =
+      AuthorizationService(
+        activity,
+        AppAuthConfiguration
+          .Builder()
+          .setBrowserMatcher(
+            browserMatcher,
+          ).build(),
+      )
+  }
+
+  private fun findSuitableBrowser(): BrowserMatcher {
     val browserMatcher =
       when (tabType) {
         // When using an auth tab, we do not need the internal browser matching logic from appauth
         TabType.AuthTab -> {
           Log.i(TAG, "Using Chrome with auth tab")
           browserDescription =
-            "${Browsers.Chrome.PACKAGE_NAME} ${activity.packageManager.getPackageInfo(
-              Browsers.Chrome.PACKAGE_NAME,
-              0,
-            ).versionName}, Auth tab"
+            "${Browsers.Chrome.PACKAGE_NAME} ${
+              activity.packageManager.getPackageInfo(
+                Browsers.Chrome.PACKAGE_NAME,
+                0,
+              ).versionName
+            }, Auth tab"
           BrowserMatcher { false }
         }
         TabType.CustomTab -> {
@@ -288,24 +304,17 @@ class IduraVerify(
           // TODO: error if there are no browsers that can handle custom tabs!
 
           browserDescription =
-            "$browserName ${activity.packageManager.getPackageInfo(
-              browserName,
-              0,
-            ).versionName}, Custom tab"
+            "$browserName ${
+              activity.packageManager.getPackageInfo(
+                browserName,
+                0,
+              ).versionName
+            }, Custom tab"
           Log.i(TAG, "Using $browserName with custom tab")
           browserMatcher
         }
       }
-
-    authorizationService =
-      AuthorizationService(
-        activity,
-        AppAuthConfiguration
-          .Builder()
-          .setBrowserMatcher(
-            browserMatcher,
-          ).build(),
-      )
+    return browserMatcher
   }
 
   /**
