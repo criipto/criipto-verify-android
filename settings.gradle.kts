@@ -19,6 +19,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Criipto Verify Android"
+rootProject.name = "Idura Verify Android"
 include(":verify")
 include(":example")

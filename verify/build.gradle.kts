@@ -9,7 +9,7 @@ android {
     buildConfig = true
   }
 
-  namespace = "com.criipto.verify"
+  namespace = "eu.idura.verify"
   compileSdk {
     version = release(36)
   }

@@ -9,16 +9,16 @@ android {
   buildFeatures {
     buildConfig = true
   }
-  namespace = "com.criipto.verifyexample"
+  namespace = "eu.idura.verifyexample"
   compileSdk {
     version = release(36)
   }
 
-  val criiptoDomain = providers.gradleProperty("criiptoDomain").get()
-  val criiptoClientId = providers.gradleProperty("criiptoClientId").get()
+  val iduraDomain = providers.gradleProperty("iduraDomain").get()
+  val iduraClientId = providers.gradleProperty("iduraClientId").get()
 
   defaultConfig {
-    applicationId = "com.criipto.verifyexample"
+    applicationId = "eu.idura.verifyexample"
     minSdk = 29
     targetSdk = 36
     versionCode = 1
@@ -26,13 +26,13 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-    manifestPlaceholders["criiptoDomain"] = criiptoDomain
+    manifestPlaceholders["iduraDomain"] = iduraDomain
   }
 
   buildTypes {
     all {
-      buildConfigField("String", "CRIIPTO_DOMAIN", "\"$criiptoDomain\"")
-      buildConfigField("String", "CRIIPTO_CLIENT_ID", "\"$criiptoClientId\"")
+      buildConfigField("String", "IDURA_DOMAIN", "\"$iduraDomain\"")
+      buildConfigField("String", "IDURA_CLIENT_ID", "\"$iduraClientId\"")
     }
     release {
       isMinifyEnabled = false
