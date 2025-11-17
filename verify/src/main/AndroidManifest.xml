@@ -9,7 +9,7 @@
     </queries>
     <application>
         <activity
-            android:name="com.criipto.verify.AppSwitchActivity"
+            android:name="eu.idura.verify.AppSwitchActivity"
             android:exported="true">
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />

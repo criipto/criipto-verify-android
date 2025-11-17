@@ -9,7 +9,7 @@ android {
   buildFeatures {
     buildConfig = true
   }
-  namespace = "com.criipto.verifyexample"
+  namespace = "eu.idura.verifyexample"
   compileSdk {
     version = release(36)
   }
@@ -18,7 +18,7 @@ android {
   val criiptoClientId = providers.gradleProperty("criiptoClientId").get()
 
   defaultConfig {
-    applicationId = "com.criipto.verifyexample"
+    applicationId = "eu.idura.verifyexample"
     minSdk = 29
     targetSdk = 36
     versionCode = 1
