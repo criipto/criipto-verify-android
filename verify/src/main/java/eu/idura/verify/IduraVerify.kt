@@ -62,7 +62,7 @@ import kotlin.time.Duration.Companion.minutes
 import android.content.Context as AndroidContext
 import io.opentelemetry.context.Context as OtelContext
 
-const val TAG = "CriiptoVerify"
+const val TAG = "IduraVerify"
 
 private const val BRAVE = "com.brave.browser"
 private const val EDGE = "com.microsoft.emmx"
@@ -99,7 +99,7 @@ enum class Action {
   Sign,
 }
 
-class CriiptoVerify(
+class IduraVerify(
   private val clientID: String,
   private val domain: Uri,
   private val redirectUri: Uri = "$domain/android/callback".toUri(),
@@ -143,9 +143,9 @@ class CriiptoVerify(
     tracing.getTracer(BuildConfig.LIBRARY_PACKAGE_NAME, BuildConfig.VERSION)
 
   private lateinit var browserDescription: String
-  private val getCriiptoJWKS = cacheResult(activity.lifecycleScope, this::loadCriiptoJWKS)
-  private val getCriiptoOIDCConfiguration =
-    cacheResult(activity.lifecycleScope, this::loadCriiptoOIDCConfiguration)
+  private val getIduraJWKS = cacheResult(activity.lifecycleScope, this::loadIduraJWKS)
+  private val getIduraOIDCConfiguration =
+    cacheResult(activity.lifecycleScope, this::loadIduraOIDCConfiguration)
 
   init {
     for (uri in listOf(domain, redirectUri, appSwitchUri)) {
@@ -215,8 +215,8 @@ class CriiptoVerify(
 
     // Load the OIDC config and JWKS configuration, so it is ready when the user initiates a login
     activity.lifecycleScope.launch {
-      async { runCatching { getCriiptoOIDCConfiguration() } }
-      async { runCatching { getCriiptoJWKS() } }
+      async { runCatching { getIduraOIDCConfiguration() } }
+      async { runCatching { getIduraJWKS() } }
     }
   }
 
@@ -360,7 +360,7 @@ class CriiptoVerify(
   /**
    * Start a login, returning the JWT as a string once the flow is complete.
    *
-   * The SDK provides builder classes for some of the eIDs supported by Criipto Verify. You should use these when possible, since they provide helper methods for the scopes and login hints supported by the specific eID provider. For example, Danish MitID supports SSN prefilling, which you can access using the `prefillSsn` method.
+   * The SDK provides builder classes for some of the eIDs supported by Idura Verify. You should use these when possible, since they provide helper methods for the scopes and login hints supported by the specific eID provider. For example, Danish MitID supports SSN prefilling, which you can access using the `prefillSsn` method.
    *
    * @param eid The eID to login with.
    * @param prompt The OIDC prompt, see https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
@@ -402,7 +402,7 @@ class CriiptoVerify(
         val authorizationRequest =
           AuthorizationRequest
             .Builder(
-              getCriiptoOIDCConfiguration(),
+              getIduraOIDCConfiguration(),
               clientID,
               ResponseTypeValues.CODE,
               redirectUri,
@@ -455,7 +455,7 @@ class CriiptoVerify(
       val decodedJWT = JWT.decode(idToken)
 
       val keyId = decodedJWT.getHeaderClaim("kid").asString()
-      val key = getCriiptoJWKS().find { it.id == keyId }
+      val key = getIduraJWKS().find { it.id == keyId }
 
       if (key == null) {
         throw Exception("Unknown key $keyId")
@@ -493,7 +493,7 @@ class CriiptoVerify(
     val endSessionRequest =
       EndSessionRequest
         .Builder(
-          getCriiptoOIDCConfiguration(),
+          getIduraOIDCConfiguration(),
         ).setIdTokenHint(idToken)
         .setPostLogoutRedirectUri(redirectUri)
         .build()
@@ -518,7 +518,7 @@ class CriiptoVerify(
   private suspend fun pushAuthorizationRequest(authorizationRequest: AuthorizationRequest): Uri {
     val response =
       httpClient.submitForm(
-        getCriiptoOIDCConfiguration()
+        getIduraOIDCConfiguration()
           .discoveryDoc!!
           .docJson
           .get(
@@ -560,7 +560,7 @@ class CriiptoVerify(
     )
     val parsedResponse = response.body<ParResponse>()
 
-    return getCriiptoOIDCConfiguration()
+    return getIduraOIDCConfiguration()
       .authorizationEndpoint
       .buildUpon()
       .appendQueryParameter("client_id", clientID)
@@ -606,14 +606,14 @@ class CriiptoVerify(
         }
       }
 
-  private suspend fun loadCriiptoJWKS() =
+  private suspend fun loadIduraJWKS() =
     withContext(Dispatchers.IO) {
       UrlJwkProvider(
         domain.toString(),
       ).all
     }
 
-  private suspend fun loadCriiptoOIDCConfiguration(): AuthorizationServiceConfiguration =
+  private suspend fun loadIduraOIDCConfiguration(): AuthorizationServiceConfiguration =
     suspendCoroutine { continuation ->
       AuthorizationServiceConfiguration.fetchFromIssuer(
         domain,

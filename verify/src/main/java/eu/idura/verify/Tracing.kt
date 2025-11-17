@@ -38,7 +38,7 @@ import kotlinx.serialization.Serializable
 import java.util.UUID
 
 @Serializable
-data class CriiptoSpan(
+data class IduraSpan(
   val context: Map<String, String>,
   val attributes: Map<String, String>,
   val name: String,
@@ -96,7 +96,7 @@ private class HeimdalExporter(
                   )
               }
 
-              CriiptoSpan(
+              IduraSpan(
                 name = spanData.name,
                 startTime = nanosToMs(spanData.startEpochNanos),
                 endTime = nanosToMs(spanData.endEpochNanos),
@@ -132,7 +132,7 @@ private class HeimdalExporter(
   override fun shutdown(): CompletableResultCode? = CompletableResultCode.ofSuccess()
 }
 
-private class CriiptoAttributesProcessor(
+private class IduraAttributesProcessor(
   private val serverAddress: String,
 ) : SpanProcessor {
   // Store a GUID, to help correlate session (such as SDK init, and logins) from the same device.
@@ -159,9 +159,9 @@ private class CriiptoAttributesProcessor(
   private val modelAttribute =
     AttributeKey
       .stringKey("device.model")
-  private val criiptoSdkVersionAttribute =
+  private val iduraSdkVersionAttribute =
     AttributeKey
-      .stringKey("criipto.sdk.version")
+      .stringKey("idura.sdk.version")
   private val sessionIdAttribute =
     AttributeKey
       .stringKey("device.session.id")
@@ -177,7 +177,7 @@ private class CriiptoAttributesProcessor(
     span.setAttribute(brandAttribute, Build.BRAND)
     span.setAttribute(manufacturerAttribute, Build.MANUFACTURER)
     span.setAttribute(modelAttribute, Build.MODEL)
-    span.setAttribute(criiptoSdkVersionAttribute, BuildConfig.VERSION)
+    span.setAttribute(iduraSdkVersionAttribute, BuildConfig.VERSION)
     span.setAttribute(sessionIdAttribute, sessionId)
   }
 
@@ -188,7 +188,7 @@ private class CriiptoAttributesProcessor(
   override fun isEndRequired(): Boolean = false
 }
 
-private class CriiptoIdGenerator : IdGenerator {
+private class IduraIdGenerator : IdGenerator {
   private val uuidV7Generator =
     Generators
       .timeBasedEpochGenerator()
@@ -217,8 +217,8 @@ internal class Tracing(
         SdkTracerProvider
           .builder()
           .setIdGenerator(
-            CriiptoIdGenerator(),
-          ).addSpanProcessor(CriiptoAttributesProcessor(serverAddress))
+            IduraIdGenerator(),
+          ).addSpanProcessor(IduraAttributesProcessor(serverAddress))
           .addSpanProcessor(
             BatchSpanProcessor
               .builder(

@@ -18,7 +18,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data android:scheme="https" />
-                <data android:host="${criiptoDomain}" />
+                <data android:host="${iduraDomain}" />
                 <data android:path="/android/callback/appswitch" />
             </intent-filter>
         </activity>
@@ -35,7 +35,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data android:scheme="https" />
-                <data android:host="${criiptoDomain}" />
+                <data android:host="${iduraDomain}" />
                 <data android:path="/android/callback" />
             </intent-filter>
         </activity>

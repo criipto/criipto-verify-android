@@ -1,17 +1,17 @@
 package eu.idura.verify.samples
 
 import eu.idura.verify.Action
-import eu.idura.verify.CriiptoVerify
+import eu.idura.verify.IduraVerify
 import eu.idura.verify.eid.DanishMitID
 import eu.idura.verify.eid.Other
 import eu.idura.verify.eid.SwedishBankID
 
-private suspend fun loginSample1(criiptoVerify: CriiptoVerify) {
+private suspend fun loginSample1(iduraVerify: IduraVerify) {
   // Login with Danish MitID
-  criiptoVerify.login(DanishMitID.substantial())
+  iduraVerify.login(DanishMitID.substantial())
 
   // Login with Danish MitID, while prefilling SSN, setting a message, and requesting user address.
-  criiptoVerify.login(
+  iduraVerify.login(
     DanishMitID
       .substantial()
       .prefillSsn("123456-7890")
@@ -20,11 +20,11 @@ private suspend fun loginSample1(criiptoVerify: CriiptoVerify) {
   )
 
   // Prompt the user to approve with MitID
-  criiptoVerify.login(DanishMitID.substantial().withAction(Action.Approve))
+  iduraVerify.login(DanishMitID.substantial().withAction(Action.Approve))
 
   // Prompt the user to sign a message with Swedish BankId
-  criiptoVerify.login(SwedishBankID.sameDevice().sign("All your base are belong to us"))
+  iduraVerify.login(SwedishBankID.sameDevice().sign("All your base are belong to us"))
 
   // Login with a type of eID not supported by the SDK
-  criiptoVerify.login(Other("urn:grn:authn:foo:bar").withScope("address"))
+  iduraVerify.login(Other("urn:grn:authn:foo:bar").withScope("address"))
 }

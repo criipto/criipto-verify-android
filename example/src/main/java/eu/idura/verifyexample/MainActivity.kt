@@ -36,7 +36,7 @@ import eu.idura.verify.eid.NorwegianBankID
 import eu.idura.verify.eid.SwedishBankID
 import eu.idura.verifyexample.ui.LoginState
 import eu.idura.verifyexample.ui.LoginViewModel
-import eu.idura.verifyexample.ui.theme.CriiptoVerifyAndroidTheme
+import eu.idura.verifyexample.ui.theme.IduraVerifyAndroidTheme
 import kotlinx.serialization.Serializable
 
 class MainActivity : ComponentActivity() {
@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
-      CriiptoVerifyAndroidTheme {
+      IduraVerifyAndroidTheme {
         MainScreen(loginViewModel)
       }
     }

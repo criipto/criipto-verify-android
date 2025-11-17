@@ -1,2 +1,2 @@
-# criipto-verify-android
-Criipto Verify SDK for Android
+# idura-verify-android
+Idura Verify SDK for Android

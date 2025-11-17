@@ -5,7 +5,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.auth0.android.jwt.JWT
-import eu.idura.verify.CriiptoVerify
+import eu.idura.verify.IduraVerify
 import eu.idura.verify.eid.EID
 import eu.idura.verifyexample.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,17 +33,17 @@ class LoginViewModel(
   initialState: LoginState,
   activity: ComponentActivity?,
 ) : ViewModel() {
-  // The Criipto verify instance cannot be instantiated until we have an activity. However, we don't have an activity in compose previews. In order to avoid null checks, we make it a lateinit property
-  private lateinit var criiptoVerify: CriiptoVerify
+  // The Idura verify instance cannot be instantiated until we have an activity. However, we don't have an activity in compose previews. In order to avoid null checks, we make it a lateinit property
+  private lateinit var iduraVerify: IduraVerify
   private val _uiState = MutableStateFlow(initialState)
   val uiState: StateFlow<LoginState> = _uiState.asStateFlow()
 
   init {
     if (activity != null) {
-      criiptoVerify =
-        CriiptoVerify(
-          BuildConfig.CRIIPTO_CLIENT_ID,
-          "https://${BuildConfig.CRIIPTO_DOMAIN}".toUri(),
+      iduraVerify =
+        IduraVerify(
+          BuildConfig.IDURA_CLIENT_ID,
+          "https://${BuildConfig.IDURA_DOMAIN}".toUri(),
           activity = activity,
         )
     }
@@ -53,7 +53,7 @@ class LoginViewModel(
     viewModelScope.launch {
       _uiState.update { LoginState.Loading() }
       try {
-        val idToken = criiptoVerify.login(eid)
+        val idToken = iduraVerify.login(eid)
         val jwt = JWT(idToken)
         val nameClaim = jwt.getClaim("name")
 
@@ -74,7 +74,7 @@ class LoginViewModel(
     viewModelScope.launch {
       _uiState.update { LoginState.Loading() }
       try {
-        criiptoVerify.logout((_uiState.value as? LoginState.LoggedIn)?.idToken)
+        iduraVerify.logout((_uiState.value as? LoginState.LoggedIn)?.idToken)
         _uiState.update { LoginState.NotLoggedIn() }
       } catch (ex: Exception) {
         _uiState.update { LoginState.NotLoggedIn(ex.localizedMessage) }
