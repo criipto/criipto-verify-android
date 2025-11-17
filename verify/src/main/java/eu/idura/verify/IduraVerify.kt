@@ -51,6 +51,7 @@ import net.openid.appauth.EndSessionResponse
 import net.openid.appauth.ResponseTypeValues
 import net.openid.appauth.browser.AnyBrowserMatcher
 import net.openid.appauth.browser.BrowserMatcher
+import net.openid.appauth.browser.BrowserSelector
 import net.openid.appauth.browser.Browsers
 import net.openid.appauth.browser.VersionedBrowserMatcher
 import java.security.interfaces.RSAPublicKey
@@ -100,6 +101,8 @@ enum class Action {
   Sign,
 }
 
+class NoSuitableBrowserException : Exception("No suitable browsers found")
+
 class IduraVerify(
   private val clientID: String,
   private val domain: String,
@@ -147,6 +150,8 @@ class IduraVerify(
   private val getIduraJWKS = cacheResult(activity.lifecycleScope, this::loadIduraJWKS)
   private val getIduraOIDCConfiguration =
     cacheResult(activity.lifecycleScope, this::loadIduraOIDCConfiguration)
+
+  private var foundASuitableBrowser = false
 
   init {
     for (uri in listOf(redirectUri, appSwitchUri)) {
@@ -245,7 +250,7 @@ class IduraVerify(
       verifyAppLink(appSwitchUri)
     }
 
-    val browserMatcher = findSuitableBrowser()
+    val (browserName, browserMatcher) = findSuitableBrowser()
 
     authorizationService =
       AuthorizationService(
@@ -256,66 +261,57 @@ class IduraVerify(
             browserMatcher,
           ).build(),
       )
+
+    // Yes, users could have no browsers installed, and any preinstalled browsers disabled.
+    if (browserName != null) {
+      foundASuitableBrowser = true
+
+      browserDescription =
+        "$browserName ${
+          activity.packageManager.getPackageInfo(
+            browserName,
+            0,
+          ).versionName
+        }, $tabType"
+      Log.i(TAG, "Using $browserDescription")
+    }
   }
 
-  private fun findSuitableBrowser(): BrowserMatcher {
-    val browserMatcher =
-      when (tabType) {
-        // When using an auth tab, we do not need the internal browser matching logic from appauth
-        TabType.AuthTab -> {
-          Log.i(TAG, "Using Chrome with auth tab")
-          browserDescription =
-            "${Browsers.Chrome.PACKAGE_NAME} ${
-              activity.packageManager.getPackageInfo(
-                Browsers.Chrome.PACKAGE_NAME,
-                0,
-              ).versionName
-            }, Auth tab"
-          BrowserMatcher { false }
-        }
-        TabType.CustomTab -> {
-          val preferredBrowser =
-            listOf(
-              Pair(Browsers.Chrome.PACKAGE_NAME, VersionedBrowserMatcher.CHROME_CUSTOM_TAB),
-              Pair(Browsers.SBrowser.PACKAGE_NAME, VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB),
-              Pair(BRAVE, BrowserMatcher { it.packageName === BRAVE }),
-              Pair(EDGE, BrowserMatcher { it.packageName === EDGE }),
-            ).find {
-              // Find the first of our preferred browsers, which is able to open a custom tab.
-              CustomTabsClient.getPackageName(
-                activity,
-                listOf(it.first),
-                true,
-              ) != null
-            }
-
-          val (browserName, browserMatcher) =
-            // If we found any of our preferred browsers above, use that.
-            preferredBrowser
-              // Otherwise, fall back to the default browser
-              ?: Pair(
-                CustomTabsClient.getPackageName(
-                  activity,
-                  emptyList(),
-                )!!,
-                AnyBrowserMatcher.INSTANCE,
-              )
-
-          // TODO: error if there are no browsers that can handle custom tabs!
-
-          browserDescription =
-            "$browserName ${
-              activity.packageManager.getPackageInfo(
-                browserName,
-                0,
-              ).versionName
-            }, Custom tab"
-          Log.i(TAG, "Using $browserName with custom tab")
-          browserMatcher
-        }
+  private fun findSuitableBrowser(): Pair<String?, BrowserMatcher> =
+    when (tabType) {
+      // When using an auth tab, we do not need the internal browser matching logic from appauth
+      TabType.AuthTab -> {
+        Pair(Browsers.Chrome.PACKAGE_NAME, BrowserMatcher { false })
       }
-    return browserMatcher
-  }
+      TabType.CustomTab -> {
+        val preferredBrowser =
+          listOf(
+            Pair(Browsers.Chrome.PACKAGE_NAME, VersionedBrowserMatcher.CHROME_CUSTOM_TAB),
+            Pair(Browsers.SBrowser.PACKAGE_NAME, VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB),
+            Pair(BRAVE, BrowserMatcher { it.packageName === BRAVE }),
+            Pair(EDGE, BrowserMatcher { it.packageName === EDGE }),
+          ).find {
+            // Find the first of our preferred browsers, which is able to open a custom tab.
+            CustomTabsClient.getPackageName(
+              activity,
+              listOf(it.first),
+              true,
+            ) != null
+          }
+
+        // If we found any of our preferred browsers above, use that.
+        preferredBrowser
+          // Otherwise, let appauth find the default browser
+          ?: Pair(
+            BrowserSelector
+              .select(
+                activity,
+                AnyBrowserMatcher.INSTANCE,
+              )?.packageName,
+            AnyBrowserMatcher.INSTANCE,
+          )
+      }
+    }
 
   /**
    * Verify that app links are correctly configured to open in the consuming application.
@@ -397,6 +393,10 @@ class IduraVerify(
           TAG,
           "Starting login with ${eid.acrValue}, traceId ${Span.current().spanContext.traceId}",
         )
+
+        if (!foundASuitableBrowser) {
+          throw NoSuitableBrowserException()
+        }
 
         val loginHints =
           (
