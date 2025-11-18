@@ -180,4 +180,3 @@ IduraVerify(
 </application>
 
 ```
->>>>>>> 602cb89 (Update README, add example project README)
