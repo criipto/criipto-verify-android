@@ -2,7 +2,7 @@ package eu.idura.verify.eid
 
 import eu.idura.verify.Action
 
-abstract class EID<T : EID<T>>(
+sealed class EID<T : EID<T>>(
   acrValue: String,
   internal val scopes: MutableSet<String> = mutableSetOf(),
   internal val loginHints: MutableSet<String> = mutableSetOf(),

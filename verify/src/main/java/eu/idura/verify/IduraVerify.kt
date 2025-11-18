@@ -11,10 +11,10 @@ import androidx.browser.auth.AuthTabIntent.AuthResult
 import androidx.browser.customtabs.CustomTabsClient
 import androidx.core.net.toUri
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.auth0.jwk.UrlJwkProvider
-import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import eu.idura.verify.eid.DanishMitID
 import eu.idura.verify.eid.EID
@@ -51,6 +51,7 @@ import net.openid.appauth.EndSessionResponse
 import net.openid.appauth.ResponseTypeValues
 import net.openid.appauth.browser.AnyBrowserMatcher
 import net.openid.appauth.browser.BrowserMatcher
+import net.openid.appauth.browser.BrowserSelector
 import net.openid.appauth.browser.Browsers
 import net.openid.appauth.browser.VersionedBrowserMatcher
 import java.security.interfaces.RSAPublicKey
@@ -60,9 +61,10 @@ import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 import kotlin.time.Duration.Companion.minutes
 import android.content.Context as AndroidContext
+import com.auth0.jwt.JWT as Auth0JWT
 import io.opentelemetry.context.Context as OtelContext
 
-const val TAG = "IduraVerify"
+internal const val TAG = "IduraVerify"
 
 private const val BRAVE = "com.brave.browser"
 private const val EDGE = "com.microsoft.emmx"
@@ -72,7 +74,7 @@ private enum class TabType {
   AuthTab(),
 }
 
-sealed class CustomTabResult {
+private sealed class CustomTabResult {
   class CustomTabSuccess(
     val resultUri: Uri,
   ) : CustomTabResult()
@@ -99,11 +101,13 @@ enum class Action {
   Sign,
 }
 
+class NoSuitableBrowserException : Exception("No suitable browsers found")
+
 class IduraVerify(
   private val clientID: String,
-  private val domain: Uri,
-  private val redirectUri: Uri = "$domain/android/callback".toUri(),
-  private val appSwitchUri: Uri? = "$domain/android/callback/appswitch".toUri(),
+  private val domain: String,
+  private val redirectUri: Uri = "https://$domain/android/callback".toUri(),
+  private val appSwitchUri: Uri? = "https://$domain/android/callback/appswitch".toUri(),
   private val activity: ComponentActivity,
 ) : DefaultLifecycleObserver {
   private val httpClient =
@@ -138,7 +142,7 @@ class IduraVerify(
   private var customTabIntentLauncher:
     ActivityResultLauncher<Pair<AuthorizationManagementRequest, Uri>>
 
-  private val tracing = Tracing(domain.host!!, httpClient)
+  private val tracing = Tracing(domain, httpClient)
   private val tracer =
     tracing.getTracer(BuildConfig.LIBRARY_PACKAGE_NAME, BuildConfig.VERSION)
 
@@ -147,11 +151,20 @@ class IduraVerify(
   private val getIduraOIDCConfiguration =
     cacheResult(activity.lifecycleScope, this::loadIduraOIDCConfiguration)
 
+  private var foundASuitableBrowser = false
+
   init {
-    for (uri in listOf(domain, redirectUri, appSwitchUri)) {
+    for (uri in listOf(redirectUri, appSwitchUri)) {
       if (uri != null && uri.scheme != "https") {
-        throw Exception("domain, redirectUri and appSwitchUri must be HTTPS URIs")
+        throw Exception("redirectUri and appSwitchUri must be HTTPS URIs")
       }
+    }
+
+    if (activity.lifecycle.currentState != Lifecycle.State.INITIALIZED) {
+      // We cannot register activity result handlers once the activity has been created, so better to fail early and explicitly
+      throw IllegalStateException(
+        "Activity must be in ${Lifecycle.State.INITIALIZED.name} state, was ${activity.lifecycle.currentState.name}",
+      )
     }
 
     activity.lifecycle.addObserver(this)
@@ -232,64 +245,12 @@ class IduraVerify(
         TabType.CustomTab
       }
 
-    if (tabType == TabType.CustomTab) {
-      verifyAppLink(redirectUri)
-    }
+    verifyAppLink(redirectUri)
     if (appSwitchUri != null) {
       verifyAppLink(appSwitchUri)
     }
 
-    val browserMatcher =
-      when (tabType) {
-        // When using an auth tab, we do not need the internal browser matching logic from appauth
-        TabType.AuthTab -> {
-          Log.i(TAG, "Using Chrome with auth tab")
-          browserDescription =
-            "${Browsers.Chrome.PACKAGE_NAME} ${activity.packageManager.getPackageInfo(
-              Browsers.Chrome.PACKAGE_NAME,
-              0,
-            ).versionName}, Auth tab"
-          BrowserMatcher { false }
-        }
-        TabType.CustomTab -> {
-          val preferredBrowser =
-            listOf(
-              Pair(Browsers.Chrome.PACKAGE_NAME, VersionedBrowserMatcher.CHROME_CUSTOM_TAB),
-              Pair(Browsers.SBrowser.PACKAGE_NAME, VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB),
-              Pair(BRAVE, BrowserMatcher { it.packageName === BRAVE }),
-              Pair(EDGE, BrowserMatcher { it.packageName === EDGE }),
-            ).find {
-              // Find the first of our preferred browsers, which is able to open a custom tab.
-              CustomTabsClient.getPackageName(
-                activity,
-                listOf(it.first),
-                true,
-              ) != null
-            }
-
-          val (browserName, browserMatcher) =
-            // If we found any of our preferred browsers above, use that.
-            preferredBrowser
-              // Otherwise, fall back to the default browser
-              ?: Pair(
-                CustomTabsClient.getPackageName(
-                  activity,
-                  emptyList(),
-                )!!,
-                AnyBrowserMatcher.INSTANCE,
-              )
-
-          // TODO: error if there are no browsers that can handle custom tabs!
-
-          browserDescription =
-            "$browserName ${activity.packageManager.getPackageInfo(
-              browserName,
-              0,
-            ).versionName}, Custom tab"
-          Log.i(TAG, "Using $browserName with custom tab")
-          browserMatcher
-        }
-      }
+    val (browserName, browserMatcher) = findSuitableBrowser()
 
     authorizationService =
       AuthorizationService(
@@ -300,7 +261,57 @@ class IduraVerify(
             browserMatcher,
           ).build(),
       )
+
+    // Yes, users could have no browsers installed, and any preinstalled browsers disabled.
+    if (browserName != null) {
+      foundASuitableBrowser = true
+
+      browserDescription =
+        "$browserName ${
+          activity.packageManager.getPackageInfo(
+            browserName,
+            0,
+          ).versionName
+        }, $tabType"
+      Log.i(TAG, "Using $browserDescription")
+    }
   }
+
+  private fun findSuitableBrowser(): Pair<String?, BrowserMatcher> =
+    when (tabType) {
+      // When using an auth tab, we do not need the internal browser matching logic from appauth
+      TabType.AuthTab -> {
+        Pair(Browsers.Chrome.PACKAGE_NAME, BrowserMatcher { false })
+      }
+      TabType.CustomTab -> {
+        val preferredBrowser =
+          listOf(
+            Pair(Browsers.Chrome.PACKAGE_NAME, VersionedBrowserMatcher.CHROME_CUSTOM_TAB),
+            Pair(Browsers.SBrowser.PACKAGE_NAME, VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB),
+            Pair(BRAVE, BrowserMatcher { it.packageName === BRAVE }),
+            Pair(EDGE, BrowserMatcher { it.packageName === EDGE }),
+          ).find {
+            // Find the first of our preferred browsers, which is able to open a custom tab.
+            CustomTabsClient.getPackageName(
+              activity,
+              listOf(it.first),
+              true,
+            ) != null
+          }
+
+        // If we found any of our preferred browsers above, use that.
+        preferredBrowser
+          // Otherwise, let appauth find the default browser
+          ?: Pair(
+            BrowserSelector
+              .select(
+                activity,
+                AnyBrowserMatcher.INSTANCE,
+              )?.packageName,
+            AnyBrowserMatcher.INSTANCE,
+          )
+      }
+    }
 
   /**
    * Verify that app links are correctly configured to open in the consuming application.
@@ -372,14 +383,20 @@ class IduraVerify(
   suspend fun login(
     eid: EID<*>,
     prompt: Prompt? = null,
-  ): String =
+  ): JWT =
     tracer
       .spanBuilder(
         "android sdk login",
       ).setAttribute("acr_value", eid.acrValue)
-      .startAndRunSuspend {
-        println("Login ${Span.current().spanContext}")
-        Log.i(TAG, "Starting login with ${eid.acrValue}")
+      .startAndRun {
+        Log.i(
+          TAG,
+          "Starting login with ${eid.acrValue}, traceId ${Span.current().spanContext.traceId}",
+        )
+
+        if (!foundASuitableBrowser) {
+          throw NoSuitableBrowserException()
+        }
 
         val loginHints =
           (
@@ -422,9 +439,9 @@ class IduraVerify(
   private suspend fun exchangeCode(
     request: AuthorizationRequest,
     callbackUri: Uri,
-  ): String {
+  ): JWT {
     val tokenResponse =
-      tracer.spanBuilder("code exchange").startAndRunSuspend {
+      tracer.spanBuilder("code exchange").startAndRun {
         val response =
           AuthorizationResponse
             .Builder(request)
@@ -452,7 +469,7 @@ class IduraVerify(
 
     return tracer.spanBuilder("JWT verification").startAndRun {
       val idToken = tokenResponse.idToken!!
-      val decodedJWT = JWT.decode(idToken)
+      val decodedJWT = Auth0JWT.decode(idToken)
 
       val keyId = decodedJWT.getHeaderClaim("kid").asString()
       val key = getIduraJWKS().find { it.id == keyId }
@@ -463,15 +480,15 @@ class IduraVerify(
 
       val algorithm = Algorithm.RSA256(key.publicKey as RSAPublicKey)
       val verifier =
-        JWT
+        Auth0JWT
           .require(algorithm)
-          .withIssuer(domain.toString())
+          .withIssuer("https://$domain")
           // Add five minutes of leeway when validating nbf and iat.
           .acceptLeeway(5.minutes.inWholeSeconds)
           .build()
 
       verifier.verify(idToken)
-      return@startAndRun idToken
+      return@startAndRun JWT(decodedJWT)
     }
   }
 
@@ -582,7 +599,7 @@ class IduraVerify(
     tracer
       .spanBuilder("launch browser")
       .setAttribute("browser", browserDescription)
-      .startAndRunSuspend {
+      .startAndRun {
         suspendCoroutine { continuation ->
           browserFlowContinuation = continuation
 
@@ -608,15 +625,13 @@ class IduraVerify(
 
   private suspend fun loadIduraJWKS() =
     withContext(Dispatchers.IO) {
-      UrlJwkProvider(
-        domain.toString(),
-      ).all
+      UrlJwkProvider(domain).all
     }
 
   private suspend fun loadIduraOIDCConfiguration(): AuthorizationServiceConfiguration =
     suspendCoroutine { continuation ->
       AuthorizationServiceConfiguration.fetchFromIssuer(
-        domain,
+        "https://$domain".toUri(),
       ) { serviceConfiguration, ex ->
         if (ex != null) {
           Log.e(TAG, "Failed to fetch OIDC configuration", ex)
