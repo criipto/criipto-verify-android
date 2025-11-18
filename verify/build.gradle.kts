@@ -1,8 +1,12 @@
 plugins {
   alias(libs.plugins.android.library)
   alias(libs.plugins.kotlin.android)
+  alias(libs.plugins.maven.publish)
   kotlin("plugin.serialization") version "2.2.20"
 }
+
+var version = providers.gradleProperty("version").get()
+setVersion(version)
 
 android {
   buildFeatures {
@@ -19,9 +23,7 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     consumerProguardFiles("consumer-rules.pro")
-    val version = "0.0.1"
     buildConfigField("String", "VERSION", "\"$version\"")
-    setVersion(version)
   }
 
   buildTypes {
@@ -39,6 +41,43 @@ android {
   }
   kotlinOptions {
     jvmTarget = "11"
+  }
+}
+
+mavenPublishing {
+  publishToMavenCentral()
+
+  signAllPublications()
+
+  coordinates("eu.idura", "verify", version)
+
+  pom {
+    name = "Idura Verify"
+    description = "An SDK which allows you to integrate Idura Verify in your Android app."
+    inceptionYear = "2025"
+    url = "https://github.com/criipto/criipto-verify-android"
+    licenses {
+      license {
+        name = "MIT"
+        url = "https://mit-license.org/"
+        distribution = "https://mit-license.org/"
+      }
+    }
+    developers {
+      developer {
+        id = "janmeier"
+        email = "jan.meier@idura.eu"
+        name = "Jan Aagaard Meier"
+        url = "https://github.com/janmeier"
+        organization = "Idura"
+        organizationUrl = "https://idura.eu"
+      }
+    }
+    scm {
+      url = "https://github.com/criipto/criipto-verify-android"
+      connection = "scm:git:git://github.com/criipto/criipto-verify-android.git"
+      developerConnection = "scm:git:ssh://git@github.com/criipto/criipto-verify-android.git"
+    }
   }
 }
 
