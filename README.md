@@ -93,7 +93,7 @@ During development, you can get the fingerprint of your local signing key by run
 When the SDK is initialized, it will verify that your app is configured to capture the app links. If your app is _not_ correctly configured, you will see a warning like so:
 
 ```
-IduraVerify   com.idura.verifyexample  W   App link is not correctly configured for https://android-sdk.idura.id/my/custom/callback
+IduraVerify   eu.idura.verifyexample  W   App link is not correctly configured for https://android-sdk.idura.id/my/custom/callback
 ```
 
 ## Logging in
@@ -147,7 +147,7 @@ IduraVerify(
 <application>
   ...
   <activity
-    android:name="com.idura.verify.RedirectUriReceiverActivity"
+    android:name="eu.idura.verify.RedirectUriReceiverActivity"
     android:exported="true"
     tools:node="replace">
     <intent-filter android:autoVerify="true">
@@ -163,7 +163,7 @@ IduraVerify(
   </activity>
 
   <activity
-    android:name="com.idura.verify.AppSwitchActivity"
+    android:name="eu.idura.verify.AppSwitchActivity"
     android:exported="true"
     tools:node="replace">
     <intent-filter android:autoVerify="true">
