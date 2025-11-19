@@ -43,29 +43,24 @@ android {
 }
 
 dependencies {
-  implementation(libs.androidx.core.ktx)
-  implementation(libs.androidx.appcompat)
-  implementation(libs.androidx.browser)
-  implementation(libs.material)
-  implementation(libs.appauth)
-  implementation(libs.jwks.rsa)
-  implementation(libs.java.jwt)
-
-  implementation(libs.ktor.client.core)
-  implementation(libs.ktor.client.android)
-  implementation(libs.ktor.client.content.negotiation)
-  implementation(libs.kotlinx.serialization)
-  implementation(libs.ktor.serialization.kotlinx.json)
-
-  implementation(platform(libs.opentelemetry.bom))
-  implementation(libs.opentelemetry.api)
-  implementation(libs.opentelemetry.sdk)
-  implementation(libs.opentelemetry.extension.kotlin)
-
-  implementation(libs.java.uuid.generator)
-
-  testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.junit)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
+
+  implementation(libraryLibs.androidx.browser)
+  implementation(libraryLibs.androidx.appcompat)
+  implementation(libraryLibs.appauth)
+  implementation(libraryLibs.jwks.rsa)
+  implementation(libraryLibs.java.jwt)
+  implementation(libraryLibs.ktor.client.core)
+  implementation(libraryLibs.ktor.client.android)
+  implementation(libraryLibs.ktor.client.content.negotiation)
+  implementation(libraryLibs.ktor.serialization.kotlinx.json)
+  implementation(platform(libraryLibs.opentelemetry.bom))
+  implementation(libraryLibs.opentelemetry.api)
+  implementation(libraryLibs.opentelemetry.sdk)
+  implementation(libraryLibs.opentelemetry.extension.kotlin)
+  implementation(libraryLibs.java.uuid.generator)
+
+  testImplementation(libraryLibs.kotlinx.coroutines.test)
 }

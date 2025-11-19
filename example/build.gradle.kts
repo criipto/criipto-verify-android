@@ -55,21 +55,22 @@ android {
 }
 
 dependencies {
-  implementation(libs.androidx.core.ktx)
-  implementation(libs.androidx.lifecycle.runtime.ktx)
-  implementation(libs.androidx.activity.compose)
-  implementation(platform(libs.androidx.compose.bom))
-  implementation(libs.androidx.compose.ui)
-  implementation(libs.androidx.compose.ui.graphics)
-  implementation(libs.androidx.compose.ui.tooling.preview)
-  implementation(libs.androidx.compose.material3)
-  implementation(libs.kotlinx.serialization)
-  implementation(project(":verify"))
   testImplementation(libs.junit)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
-  androidTestImplementation(platform(libs.androidx.compose.bom))
-  androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-  debugImplementation(libs.androidx.compose.ui.tooling)
-  debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+  implementation(exampleLibs.androidx.core.ktx)
+  implementation(exampleLibs.androidx.lifecycle.runtime.ktx)
+  implementation(exampleLibs.androidx.activity.compose)
+  implementation(platform(exampleLibs.androidx.compose.bom))
+  implementation(exampleLibs.androidx.compose.ui)
+  implementation(exampleLibs.androidx.compose.ui.graphics)
+  implementation(exampleLibs.androidx.compose.ui.tooling.preview)
+  implementation(exampleLibs.androidx.compose.material3)
+  implementation(project(":verify"))
+
+  androidTestImplementation(platform(exampleLibs.androidx.compose.bom))
+  androidTestImplementation(exampleLibs.androidx.compose.ui.test.junit4)
+  debugImplementation(exampleLibs.androidx.compose.ui.tooling)
+  debugImplementation(exampleLibs.androidx.compose.ui.test.manifest)
 }
