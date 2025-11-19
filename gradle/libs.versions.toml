@@ -1,64 +1,15 @@
 [versions]
 agp = "8.13.1"
 kotlin = "2.2.20"
-coreKtx = "1.17.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
-lifecycleRuntimeKtx = "2.9.4"
-activityCompose = "1.11.0"
-composeBom = "2025.10.00"
-appcompat = "1.7.1"
-material = "1.13.0"
-browser = "1.9.0"
-appauth = "0.11.1"
-jwksRsa = "0.23.0"
-javaJwt = "4.5.0"
-jwtdecode = "2.0.2"
 ktlint = "13.1.0"
-ktor = "3.3.1"
-kotlixSerialization = "1.9.0"
-javaUuidGenerator = "5.1.1"
-opentelemetryBom = "1.55.0"
-kotlinxCoroutinesTest = "1.10.2"
 
 [libraries]
-androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
-androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
-androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
-androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
-androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
-androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
-androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
-androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
-androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
-androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
-androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
-androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
-
-appauth = {group = "net.openid", name="appauth", version.ref = "appauth"}
-java-jwt = { group = "com.auth0", name = "java-jwt", version.ref = "javaJwt" }
-jwks-rsa = { group = "com.auth0", name = "jwks-rsa", version.ref = "jwksRsa" }
-jwtdecode = { group = "com.auth0.android", name = "jwtdecode", version.ref = "jwtdecode" }
-java-uuid-generator = { module = "com.fasterxml.uuid:java-uuid-generator", version.ref = "javaUuidGenerator" }
-
-ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
-ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "ktor" }
-ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
-ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
-kotlinx-serialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlixSerialization"}
-
-opentelemetry-bom = { module = "io.opentelemetry:opentelemetry-bom", version.ref = "opentelemetryBom" }
-opentelemetry-api = { module = "io.opentelemetry:opentelemetry-api" }
-opentelemetry-extension-kotlin = { module = "io.opentelemetry:opentelemetry-extension-kotlin" }
-opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk" }
-
-kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest"}
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

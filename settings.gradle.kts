@@ -17,6 +17,15 @@ dependencyResolutionManagement {
     google()
     mavenCentral()
   }
+
+  versionCatalogs {
+    create("exampleLibs") {
+      from(files("./gradle/example.libs.versions.toml"))
+    }
+    create("libraryLibs") {
+      from(files("./gradle/verify.libs.versions.toml"))
+    }
+  }
 }
 
 rootProject.name = "Idura Verify Android"
