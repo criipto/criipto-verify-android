@@ -23,10 +23,6 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.forms.submitForm
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
-import io.ktor.http.content.OutgoingContent
-import io.ktor.http.formUrlEncode
 import io.ktor.http.parametersOf
 import io.ktor.serialization.kotlinx.json.json
 import io.opentelemetry.api.trace.Span
@@ -533,34 +529,27 @@ class IduraVerify(
    * Starts the PAR flow, as described in https://datatracker.ietf.org/doc/html/rfc9126
    */
   private suspend fun pushAuthorizationRequest(authorizationRequest: AuthorizationRequest): Uri {
+    val authorizationRequestUri = authorizationRequest.toUri()
     val response =
       httpClient.submitForm(
-        getIduraOIDCConfiguration()
-          .discoveryDoc!!
-          .docJson
-          .get(
-            "pushed_authorization_request_endpoint",
-          ).toString(),
+        url =
+          getIduraOIDCConfiguration()
+            .discoveryDoc!!
+            .docJson
+            .get(
+              "pushed_authorization_request_endpoint",
+            ).toString(),
+        formParameters =
+          parametersOf(
+            authorizationRequestUri.queryParameterNames.associateWith { key ->
+              authorizationRequestUri.getQueryParameters(key)
+            },
+          ),
       ) {
         tracing.propagators().textMapPropagator.inject(
           OtelContext.current(),
           this,
           KtorRequestSetter,
-        )
-
-        // The FormDataContent class appends ; charset=UTF-8 to the content-type, which Verify does not like. So we create our own type
-        setBody(
-          object : OutgoingContent.ByteArrayContent() {
-            override val contentType =
-              ContentType.Application.FormUrlEncoded.withoutParameters()
-
-            override fun bytes() =
-              parametersOf(
-                authorizationRequest.toUri().queryParameterNames.associateWith {
-                  listOf(authorizationRequest.toUri().getQueryParameter(it)!!)
-                },
-              ).formUrlEncode().toByteArray()
-          },
         )
       }
 
