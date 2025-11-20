@@ -1,6 +1,6 @@
 # idura-verify-android
 
-This repository contains the Idura Verify SDK for Android. It allows your application to act as a [_public client_](https://docs.idura.com/verify/getting-started/glossary/#public-clients), meaning it does not use a client secret, but instead employs [PKCE](https://docs.idura.com/verify/getting-started/glossary/#pkce-proof-key-for-code-exchange) to ensure that a malicious actor cannot intercept the authorization code.
+The Idura Verify Android SDK allows your users to authenticate with a host of European eID providers. It allows your application to act as a [_public client_](https://docs.idura.com/verify/getting-started/glossary/#public-clients), meaning it does not use a client secret, but instead employs [PKCE](https://docs.idura.com/verify/getting-started/glossary/#pkce-proof-key-for-code-exchange) to ensure that a malicious actor cannot intercept the authorization code.
 
 In addition to the basic OIDC flow, the SDK also supports [app switching](https://docs.idura.com/verify/guides/appswitch/) for the Danish MitID app.
 
@@ -19,7 +19,7 @@ implementation("eu.idura:verify:1.0.0")
 
 # Usage
 
-If you prefer a more interactive approach, there is an [example project](/example/README.md) which your can run and play around with.
+If you prefer a more interactive approach, there is an [example project](https://github.com/criipto/idura-verify-android/blob/master/example/README.md) which your can run and play around with.
 
 ## Initialization
 
